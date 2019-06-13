@@ -9,6 +9,7 @@
 #include "caremote.h"
 #include "cautil.h"
 #include "realloc-buffer.h"
+#include "parse-util.h"
 #include "util.h"
 
 static volatile sig_atomic_t quit = false;
@@ -701,7 +702,12 @@ static int parse_argv(int argc, char *argv[]) {
                         break;
 
                 case ARG_RATE_LIMIT_BPS:
-                        arg_rate_limit_bps = strtoll(optarg, NULL, 10);
+                        r = parse_size(optarg, (uint64_t *)&arg_rate_limit_bps);
+                        if (r < 0)
+                                return log_error_errno(r, "Unable to parse rate limit %s: %m", optarg);
+                        if (arg_rate_limit_bps == 0 || arg_rate_limit_bps > UINT32_MAX)
+                                return log_error_errno(EINVAL, "Rate limit size cannot be zero or is out of range.");
+
                         break;
 
                 case '?':
