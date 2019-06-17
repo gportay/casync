@@ -19,6 +19,7 @@ static int arg_log_level = -1;
 static bool arg_verbose = false;
 static curl_off_t arg_rate_limit_bps = 0;
 static long arg_max_host_connections = 5;
+static bool arg_ssl_trust_peer = false;
 
 typedef enum Protocol {
         PROTOCOL_HTTP,
@@ -559,6 +560,11 @@ static int make_easy(CURL **ret,
                         return log_error_curle(c, "Failed to set CURLOPT_MAX_RECV_SPEED_LARGE");
         }
 
+        if (arg_ssl_trust_peer)
+                c = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false);
+                if (c != CURLE_OK)
+                        return log_error_curle(c, "Failed to set CURLOPT_SSL_VERIFYPEER");
+
         c = curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4);
         if (c != CURLE_OK)
                 return log_error_curle(c, "Failed to set CURLOPT_VERBOSECURL");
@@ -967,6 +973,7 @@ static int parse_argv(int argc, char *argv[]) {
                 { "verbose",              no_argument,       NULL, 'v'                      },
                 { "rate-limit-bps",       required_argument, NULL, ARG_RATE_LIMIT_BPS       },
                 { "max-host-connections", required_argument, NULL, ARG_MAX_HOST_CONNECTIONS },
+                { "ssl-trust-peer",       no_argument,       NULL, ARG_SSL_TRUST_PEER       },
                 {}
         };
 
@@ -1028,6 +1035,10 @@ static int parse_argv(int argc, char *argv[]) {
                         if (arg_max_host_connections == 0 || arg_max_host_connections > UINT32_MAX)
                                 return log_error_errno(EINVAL, "Max host connections cannot be zero or is out of range.");
 
+                        break;
+
+                case ARG_SSL_TRUST_PEER:
+                        arg_ssl_trust_peer = true;
                         break;
 
                 case '?':
