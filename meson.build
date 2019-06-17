@@ -129,7 +129,7 @@ libzstd = dependency(
 conf.set10('HAVE_LIBZSTD', libzstd.found())
 
 libcurl = dependency('libcurl',
-                     version : '>= 7.29.0')
+                     version : '>= 7.43.0')
 openssl = dependency('openssl',
                      version : '>= 1.0')
 libacl = cc.find_library('acl')
