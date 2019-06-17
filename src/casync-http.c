@@ -229,6 +229,10 @@ static size_t write_index(const void *buffer, size_t size, size_t nmemb, void *u
                 return 0;
         }
 
+        r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
+        if (r < 0)
+                return r;
+
         return product;
 }
 
@@ -244,6 +248,10 @@ static int write_index_eof(CaRemote *rr) {
         r = ca_remote_put_index_eof(rr);
         if (r < 0)
                 return log_error_errno(r, "Failed to put index EOF: %m");
+
+        r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
+        if (r < 0)
+                return r;
 
         return 0;
 }
@@ -265,6 +273,10 @@ static size_t write_archive(const void *buffer, size_t size, size_t nmemb, void 
                 return 0;
         }
 
+        r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
+        if (r < 0)
+                return r;
+
         return product;
 }
 
@@ -280,6 +292,10 @@ static int write_archive_eof(CaRemote *rr) {
         r = ca_remote_put_archive_eof(rr);
         if (r < 0)
                 return log_error_errno(r, "Failed to put archive EOF: %m");
+
+        r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
+        if (r < 0)
+                return r;
 
         return 0;
 }
