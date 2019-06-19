@@ -28,6 +28,20 @@ __casync_get_arg_n()
     done
 }
 
+# This function performs file and directory completion from archive or archive
+# index.
+# @param $@  The argument given to `list'.
+__casync_list() {
+    local -a toks
+    mapfile -t <<< "$(casync list $1)"
+    for line in "${MAPFILE[@]}"
+    do
+        read -r mode path <<<"$line"
+        toks+=("${path%%/*}")
+    done
+    COMPREPLY=($(compgen -W "${toks[*]}" -- "$cur"))
+}
+
 _casync() {
     # Assigned variable by _init_completion:
     #   cur    Current argument.
@@ -117,7 +131,12 @@ _casync() {
                 if [[ $args -eq 2 ]]; then
                     _filedir
                 elif [[ $args -eq 3 ]]; then
-                    _filedir
+                    __casync_get_arg_n '=' "$opts_arg" '' 2
+                    if [[ $arg =~ \.(caidx|catar)$ ]]; then
+                        __casync_list "$arg"
+                    else
+                        _filedir
+                    fi
                 fi
                 ;;
             # gc BLOB_INDEX|ARCHIVE_INDEX ...
