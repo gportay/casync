@@ -121,7 +121,13 @@ _casync() {
                 if [[ $args -eq 2 ]]; then
                     _filedir '@(caibx|caidx|catar)'
                 elif [[ $args -eq 3 ]]; then
-                    _filedir
+                    __casync_get_arg_n '=' "$opts_arg" '' 2
+                    if [[ $command == extract ]] &&
+                       [[ $arg =~ \.(caidx|catar)$ ]]; then
+                        __casync_list "$arg"
+                    else
+                        _filedir
+                    fi
                 fi
                 ;;
             # list|mtree|stat [ARCHIVE|ARCHIVE_INDEX|DIRECTORY] [PATH]
