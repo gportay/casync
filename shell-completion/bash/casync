@@ -130,7 +130,8 @@ _casync() {
                     fi
                 fi
                 ;;
-            # list|mtree|stat [ARCHIVE|ARCHIVE_INDEX|DIRECTORY] [PATH]
+            # list|mtree|stat [DIRECTORY]
+            # list|mtree|stat [ARCHIVE|ARCHIVE_INDEX] [PATH]
             # mount [ARCHIVE|ARCHIVE_INDEX] PATH
             # mkdev [BLOB|BLOB_INDEX] [NODE]
             list|mtree|stat|mount|mkdev)
