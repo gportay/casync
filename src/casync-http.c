@@ -442,12 +442,9 @@ static int acquire_file(const char *url,
 static int run(int argc, char *argv[]) {
         const char *base_url, *archive_url, *index_url, *wstore_url;
         size_t n_stores = 0, current_store = 0;
-        _cleanup_(curl_easy_cleanupp) CURL *curl = NULL;
         _cleanup_(ca_remote_unrefp) CaRemote *rr = NULL;
         _cleanup_(realloc_buffer_free) ReallocBuffer chunk_buffer = {};
         _cleanup_free_ char *url_buffer = NULL;
-        long protocol_status;
-        CURLcode c;
         int r;
 
         if (argc < _CA_REMOTE_ARG_MAX) {
@@ -488,41 +485,6 @@ static int run(int argc, char *argv[]) {
         r = ca_remote_set_io_fds(rr, STDIN_FILENO, STDOUT_FILENO);
         if (r < 0)
                 return log_error_errno(r, "Failed to set I/O file descriptors: %m");
-
-        curl = curl_easy_init();
-        if (!curl)
-                return log_oom();
-
-        c = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-        if (c != CURLE_OK)
-                return log_error_curle(c, "Failed to set CURLOPT_FOLLOWLOCATION");
-
-        c = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, arg_protocol == PROTOCOL_FTP ? CURLPROTO_FTP :
-                                                      arg_protocol == PROTOCOL_SFTP? CURLPROTO_SFTP: CURLPROTO_HTTP|CURLPROTO_HTTPS);
-        if (c != CURLE_OK)
-                return log_error_curle(c, "Failed to set CURLOPT_PROTOCOLS");
-
-        if (arg_protocol == PROTOCOL_SFTP) {
-                /* activate the ssh agent. For this to work you need
-                   to have ssh-agent running (type set | grep SSH_AGENT to check) */
-                c = curl_easy_setopt(curl, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_AGENT);
-                if (c != CURLE_OK)
-                        log_error_curle(c, "Failed to set CURLOPT_SSH_AUTH_TYPES, ignoring.");
-        }
-
-        if (arg_rate_limit_bps > 0) {
-                c = curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, arg_rate_limit_bps);
-                if (c != CURLE_OK)
-                        return log_error_curle(c, "Failed to set CURLOPT_MAX_SEND_SPEED_LARGE");
-
-                c = curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, arg_rate_limit_bps);
-                if (c != CURLE_OK)
-                        return log_error_curle(c, "Failed to set CURLOPT_MAX_RECV_SPEED_LARGE");
-        }
-
-        c = curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4);
-        if (c != CURLE_OK)
-                return log_error_curle(c, "Failed to set CURLOPT_VERBOSECURL");
 
         if (archive_url) {
                 r = acquire_file(archive_url, write_archive, rr);
@@ -586,57 +548,21 @@ static int run(int argc, char *argv[]) {
                 if (!url_buffer)
                         return log_oom();
 
-                c = curl_easy_setopt(curl, CURLOPT_URL, url_buffer);
-                if (c != CURLE_OK)
-                        return log_error_curle(c, "Failed to set CURLOPT_URLCURL");
-
-                c = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_chunk);
-                if (c != CURLE_OK)
-                        return log_error_curle(c, "Failed to set CURLOPT_WRITEFUNCTION");
-
-                c = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &chunk_buffer);
-                if (c != CURLE_OK)
-                        return log_error_curle(c, "Failed to set CURLOPT_WRITEDATA");
-
-                if (arg_rate_limit_bps > 0) {
-                        c = curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, arg_rate_limit_bps);
-                        if (c != CURLE_OK)
-                                return log_error_curle(c, "Failed to set CURLOPT_MAX_SEND_SPEED_LARGE");
-
-                        c = curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, arg_rate_limit_bps);
-                        if (c != CURLE_OK)
-                                return log_error_curle(c, "Failed to set CURLOPT_MAX_RECV_SPEED_LARGE");
-                }
-
-                c = curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4);
-                if (c != CURLE_OK)
-                        return log_error_curle(c, "Failed to set CURLOPT_VERBOSE");
-
-                log_debug("Acquiring %s...", url_buffer);
-
-                c = robust_curl_easy_perform(curl);
-                if (c != CURLE_OK)
-                        return log_error_curle(c, "Failed to acquire %s", url_buffer);
-
-                c = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &protocol_status);
-                if (c != CURLE_OK)
-                        return log_error_curle(c, "Failed to get CURLINFO_RESPONSE_CODE");
-
-                r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_CHUNK);
-                if (r == -EPIPE)
-                        return 0;
+                r = acquire_file(url_buffer, write_chunk, &chunk_buffer);
                 if (r < 0)
                         return r;
+                if (r == 1) {
+                        r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_CHUNK);
+                        if (r == -EPIPE)
+                                return 0;
 
-                if (protocol_status_ok(arg_protocol, protocol_status)) {
                         r = ca_remote_put_chunk(rr, &id, CA_CHUNK_COMPRESSED, realloc_buffer_data(&chunk_buffer), realloc_buffer_size(&chunk_buffer));
                         if (r < 0)
                                 return log_error_errno(r, "Failed to write chunk: %m");
                 } else {
-                        if (arg_verbose)
-                                log_error("%s server failure %ld while requesting %s",
-                                          protocol_str(arg_protocol), protocol_status,
-                                          url_buffer);
+                        r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_CHUNK);
+                        if (r == -EPIPE)
+                                return 0;
 
                         r = ca_remote_put_missing(rr, &id);
                         if (r < 0)
