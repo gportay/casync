@@ -402,125 +402,6 @@ finish:
         return r;
 }
 
-static int acquire_chunk(const char *url,
-                         size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata),
-                         void *userdata) {
-
-        long protocol_status;
-        CURL *curl;
-        int r = 1;
-
-        assert(url);
-        assert(callback);
-
-        curl = curl_easy_init();
-        if (!curl) {
-                r = log_oom();
-                goto finish;
-        }
-
-        if (curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK) {
-                log_error("Failed to turn on location following.");
-                r = -EIO;
-                goto finish;
-        }
-
-        if (curl_easy_setopt(curl, CURLOPT_PROTOCOLS, arg_protocol == ARG_PROTOCOL_FTP ? CURLPROTO_FTP :
-                                                      arg_protocol == ARG_PROTOCOL_SFTP? CURLPROTO_SFTP: CURLPROTO_HTTP|CURLPROTO_HTTPS) != CURLE_OK) {
-                log_error("Failed to limit protocols to HTTP/HTTPS/FTP/SFTP.");
-                r = -EIO;
-                goto finish;
-        }
-
-        if (arg_protocol == ARG_PROTOCOL_SFTP) {
-                /* activate the ssh agent. For this to work you need
-                   to have ssh-agent running (type set | grep SSH_AGENT to check) */
-                if (curl_easy_setopt(curl, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_AGENT) != CURLE_OK)
-                        log_error("Failed to turn on ssh agent support, ignoring.");
-        }
-
-        if (curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4)) {
-                log_error("Failed to set CURL verbosity.");
-                r = -EIO;
-                goto finish;
-        }
-
-        if (arg_rate_limit_bps > 0) {
-                if (curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
-                        log_error("Failed to set CURL send speed limit.");
-                        r = -EIO;
-                        goto finish;
-                }
-
-                if (curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
-                        log_error("Failed to set CURL receive speed limit.");
-                        r = -EIO;
-                        goto finish;
-                }
-        }
-
-        if (curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level >= 6)) {
-                log_error("Failed to set CURL verbose.");
-                r = -EIO;
-                goto finish;
-        }
-
-        if (curl_easy_setopt(curl, CURLOPT_URL, url) != CURLE_OK) {
-                log_error("Failed to set CURL URL to: %s", url);
-                r = -EIO;
-                goto finish;
-        }
-
-        if (curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback) != CURLE_OK) {
-                log_error("Failed to set CURL callback function.");
-                r = -EIO;
-                goto finish;
-        }
-
-        if (curl_easy_setopt(curl, CURLOPT_WRITEDATA, userdata) != CURLE_OK) {
-                log_error("Failed to set CURL private data.");
-                r = -EIO;
-                goto finish;
-        }
-
-        log_debug("Acquiring %s...", url);
-
-        if (robust_curl_easy_perform(curl) != CURLE_OK) {
-                log_error("Failed to acquire %s", url);
-                r = -EIO;
-                goto finish;
-        }
-
-        if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &protocol_status) != CURLE_OK) {
-                log_error("Failed to query response code");
-                r = -EIO;
-                goto finish;
-        }
-
-        if (IN_SET(arg_protocol, ARG_PROTOCOL_HTTP, ARG_PROTOCOL_HTTPS) && protocol_status != 200) {
-                if (arg_verbose)
-                        log_error("HTTP server failure %li while requesting %s.", protocol_status, url);
-
-                r = 0;
-        } else if (arg_protocol == ARG_PROTOCOL_FTP && (protocol_status < 200 || protocol_status > 299)) {
-                if (arg_verbose)
-                        log_error("FTP server failure %li while requesting %s.", protocol_status, url);
-
-                r = 0;
-        } else if (arg_protocol == ARG_PROTOCOL_SFTP && (protocol_status != 0)) {
-                if (arg_verbose)
-                        log_error("SFTP server failure %li while requesting %s.", protocol_status, url);
-
-                r = 0;
-        }
-
-finish:
-        if (curl)
-                curl_easy_cleanup(curl);
-
-        return r;
-}
-
 static int run(int argc, char *argv[]) {
         const char *base_url, *archive_url, *index_url, *wstore_url;
         size_t n_stores = 0, current_store = 0;
@@ -645,7 +526,7 @@ static int run(int argc, char *argv[]) {
                         goto finish;
                 }
 
-                r = acquire_chunk(url_buffer, write_chunk, &chunk_buffer);
+                r = acquire_file(url_buffer, write_chunk, &chunk_buffer);
                 if (r < 0)
                         goto finish;
                 if (r == 0) {
