@@ -70,7 +70,7 @@ _casync() {
 
     case "$prev" in
         -l|--log-level)
-            COMPREPLY=($(compgen -W "debug info err" -- "$cur"))
+            COMPREPLY=($(compgen -W "emergency alert critical error warning notice info debug" -- "$cur"))
             return 0
             ;;
         --store|--extra-store|--seed|--cache)
