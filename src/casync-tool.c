@@ -3195,6 +3195,7 @@ static int verb_mkdev(int argc, char *argv[]) {
                                         [1] = { .fd = udev_fd, .events = POLLIN },
                                 };
 
+                                fprintf(stderr, "[%i] %s@%i n: %li\n", getpid(), __func__, __LINE__, udev_fd < 0 ? 1L : 2L);
                                 r = ppoll(p, udev_fd < 0 ? 1 : 2, NULL, &ss);
                                 if ((r >= 0 || errno == EINTR) && quit)
                                         r = -ESHUTDOWN;
@@ -3202,6 +3203,7 @@ static int verb_mkdev(int argc, char *argv[]) {
                                         r = -errno;
                                 else
                                         r = 0;
+                                fprintf(stderr, "[%i] %s@%i r: %i\n", getpid(), __func__, __LINE__, r);
                         }
 
                         block_exit_handler(SIG_UNBLOCK, NULL);

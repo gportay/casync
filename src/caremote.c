@@ -2006,6 +2006,10 @@ int ca_remote_poll(CaRemote *rr, uint64_t timeout_nsec, const sigset_t *ss) {
         if (n == 0)
                 return 0;
 
+        fprintf(stderr, "[%i] %s@%i timeout_nsec: %lu, n: %li\n", getpid(), __func__, __LINE__, timeout_nsec != UINT64_MAX ? timeout_nsec : 0L, n);
+        for (size_t i = 0; i < n; i++)
+                fprintf(stderr, "[%i] %s@%i - pollfd[%li]: { .fd: %i, .events: 0x%x }\n", getpid(), __func__, __LINE__, i, pollfd[i].fd, pollfd[i].events);
+
         if (timeout_nsec != UINT64_MAX) {
                 struct timespec ts;
 
@@ -2014,6 +2018,10 @@ int ca_remote_poll(CaRemote *rr, uint64_t timeout_nsec, const sigset_t *ss) {
                 r = ppoll(pollfd, n, &ts, ss);
         } else
                 r = ppoll(pollfd, n, NULL, ss);
+        fprintf(stderr, "[%i] %s@%i r: %i\n", getpid(), __func__, __LINE__, r);
+        for (size_t i = 0; i < n; i++)
+                fprintf(stderr, "[%i] %s@%i - pollfd[%li]: { .fd: %i, .events: 0x%x, .revents: 0x%x }\n", getpid(), __func__, __LINE__, i, pollfd[i].fd, pollfd[i].events, pollfd[i].revents);
+
         if (r < 0)
                 return -errno;
 

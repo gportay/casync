@@ -99,6 +99,7 @@ static int process_remote(CaRemote *rr, ProcessUntil until) {
                 case PROCESS_UNTIL_CAN_PUT_CHUNK:
 
                         r = ca_remote_can_put_chunk(rr);
+                        fprintf(stderr, "[%i] %s@%i PROCESS_UNTIL_CAN_PUT_CHUNK, r: %i\n", getpid(), __func__, __LINE__, r);
                         if (r == -EPIPE)
                                 return r;
                         if (r < 0)
@@ -111,6 +112,7 @@ static int process_remote(CaRemote *rr, ProcessUntil until) {
                 case PROCESS_UNTIL_CAN_PUT_INDEX:
 
                         r = ca_remote_can_put_index(rr);
+                        fprintf(stderr, "[%i] %s@%i PROCESS_UNTIL_CAN_PUT_INDEX, r: %i\n", getpid(), __func__, __LINE__, r);
                         if (r == -EPIPE)
                                 return r;
                         if (r < 0)
@@ -123,6 +125,7 @@ static int process_remote(CaRemote *rr, ProcessUntil until) {
                 case PROCESS_UNTIL_CAN_PUT_ARCHIVE:
 
                         r = ca_remote_can_put_archive(rr);
+                        fprintf(stderr, "[%i] %s@%i PROCESS_UNTIL_CAN_PUT_ARCHIVE, r: %i\n", getpid(), __func__, __LINE__, r);
                         if (r == -EPIPE)
                                 return r;
                         if (r < 0)
@@ -135,17 +138,19 @@ static int process_remote(CaRemote *rr, ProcessUntil until) {
                 case PROCESS_UNTIL_HAVE_REQUEST:
 
                         r = ca_remote_has_pending_requests(rr);
+                        fprintf(stderr, "[%i] %s@%i PROCESS_UNTIL_HAVE_REQUEST, r: %i\n", getpid(), __func__, __LINE__, r);
                         if (r == -EPIPE)
                                 return r;
                         if (r < 0)
                                 return log_error_errno(r, "Failed to determine whether there are pending requests.");
-                        if (r > 0)
-                                return 0;
+                        return r;
 
                         break;
 
                 case PROCESS_UNTIL_WRITTEN:
+
                         r = ca_remote_has_unwritten(rr);
+                        fprintf(stderr, "[%i] %s@%i PROCESS_UNTIL_WRITTEN, r: %i\n", getpid(), __func__, __LINE__, r);
                         if (r == -EPIPE)
                                 return r;
                         if (r < 0)
@@ -156,6 +161,8 @@ static int process_remote(CaRemote *rr, ProcessUntil until) {
                         break;
 
                 case PROCESS_UNTIL_FINISHED:
+
+                        fprintf(stderr, "[%i] %s@%i PROCESS_UNTIL_FINISHED\n", getpid(), __func__, __LINE__);
                         break;
 
                 default:

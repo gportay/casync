@@ -3838,6 +3838,7 @@ int ca_sync_poll(CaSync *s, uint64_t timeout_nsec, const sigset_t *ss) {
         }
         assert_se(n == n_pollfd);
 
+        fprintf(stderr, "[%i] %s@%i timeout_nsec: %lu, n: %li\n", getpid(), __func__, __LINE__, timeout_nsec != UINT64_MAX ? timeout_nsec : 0L, n);
         if (timeout_nsec != UINT64_MAX) {
                 struct timespec ts;
 
@@ -3846,6 +3847,7 @@ int ca_sync_poll(CaSync *s, uint64_t timeout_nsec, const sigset_t *ss) {
                 r = ppoll(pollfd, n, &ts, ss);
         } else
                 r = ppoll(pollfd, n, NULL, ss);
+        fprintf(stderr, "[%i] %s@%i r: %i\n", getpid(), __func__, __LINE__, r);
         if (r < 0)
                 return -errno;
 
