@@ -355,15 +355,47 @@ static char *chunk_url(const char *store_url, const CaChunkID *id) {
 }
 
 static int acquire_file(CaRemote *rr,
-                        CURL *curl,
                         const char *url,
                         size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata)) {
         CURLcode c;
         long protocol_status;
+        _cleanup_(curl_easy_cleanupp) CURL *curl = NULL;
 
-        assert(curl);
         assert(url);
         assert(callback);
+
+        curl = curl_easy_init();
+        if (!curl)
+                return log_oom();
+
+        c = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        if (c != CURLE_OK)
+                return log_error_curle(c, "Failed to set CURLOPT_FOLLOWLOCATION");
+
+        c = curl_easy_setopt(curl, CURLOPT_PROTOCOLS, arg_protocol == PROTOCOL_FTP ? CURLPROTO_FTP :
+                                                      arg_protocol == PROTOCOL_SFTP? CURLPROTO_SFTP: CURLPROTO_HTTP|CURLPROTO_HTTPS);
+        if (c != CURLE_OK)
+                return log_error_curle(c, "Failed to set CURLOPT_PROTOCOLS");
+
+        if (arg_protocol == PROTOCOL_SFTP) {
+                c = curl_easy_setopt(curl, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_AGENT);
+                if (c != CURLE_OK)
+                        log_error_curle(c, "Failed to set CURLOPT_SSH_AUTH_TYPES, ignoring.");
+        }
+
+        if (arg_rate_limit_bps > 0) {
+                c = curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, arg_rate_limit_bps);
+                if (c != CURLE_OK)
+                        return log_error_curle(c, "Failed to set CURLOPT_MAX_SEND_SPEED_LARGE");
+
+                c = curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, arg_rate_limit_bps);
+                if (c != CURLE_OK)
+                        return log_error_curle(c, "Failed to set CURLOPT_MAX_RECV_SPEED_LARGE");
+        }
+
+        c = curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4);
+        if (c != CURLE_OK)
+                return log_error_curle(c, "Failed to set CURLOPT_VERBOSECURL");
 
         c = curl_easy_setopt(curl, CURLOPT_URL, url);
         if (c != CURLE_OK)
@@ -497,7 +529,7 @@ static int run(int argc, char *argv[]) {
                 return log_error_curle(c, "Failed to set CURLOPT_VERBOSECURL");
 
         if (archive_url) {
-                r = acquire_file(rr, curl, archive_url, write_archive);
+                r = acquire_file(rr, archive_url, write_archive);
                 if (r < 0)
                         return r;
                 if (r == 0)
@@ -509,7 +541,7 @@ static int run(int argc, char *argv[]) {
         }
 
         if (index_url) {
-                r = acquire_file(rr, curl, index_url, write_index);
+                r = acquire_file(rr, index_url, write_index);
                 if (r < 0)
                         return r;
                 if (r == 0)
