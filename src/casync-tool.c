@@ -1299,6 +1299,12 @@ static int verb_make(int argc, char *argv[]) {
         if (r < 0)
                 return r;
 
+        if (arg_log_level != -1) {
+                r = ca_sync_set_log_level(s, arg_log_level);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to set log level: %m");
+        }
+
         if (arg_rate_limit_bps != UINT64_MAX) {
                 r = ca_sync_set_rate_limit_bps(s, arg_rate_limit_bps);
                 if (r < 0)
@@ -1596,6 +1602,12 @@ static int verb_extract(int argc, char *argv[]) {
                         if (r < 0 && r != -ENOENT)
                                 return log_error_errno(r, "Failed to add existing file as seed %s, ignoring: %m", output);
                 }
+        }
+
+        if (arg_log_level != -1) {
+                r = ca_sync_set_log_level(s, arg_log_level);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to set log level: %m");
         }
 
         if (arg_rate_limit_bps != UINT64_MAX) {
@@ -2753,6 +2765,12 @@ static int verb_mount(int argc, char *argv[]) {
                         return r;
         }
 
+        if (arg_log_level != -1) {
+                r = ca_sync_set_log_level(s, arg_log_level);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to set log level: %m");
+        }
+
         if (arg_rate_limit_bps != UINT64_MAX) {
                 r = ca_sync_set_rate_limit_bps(s, arg_rate_limit_bps);
                 if (r < 0)
@@ -2871,6 +2889,12 @@ static int verb_mkdev(int argc, char *argv[]) {
                 r = set_default_store(input);
                 if (r < 0)
                         goto finish;
+        }
+
+        if (arg_log_level != -1) {
+                r = ca_sync_set_log_level(s, arg_log_level);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to set log level: %m");
         }
 
         if (arg_rate_limit_bps != UINT64_MAX) {
@@ -3434,6 +3458,12 @@ static int verb_pull(int argc, char *argv[]) {
         if (r < 0)
                 return log_error_errno(r, "Failed to set feature flags: %m");
 
+        if (arg_log_level != -1) {
+	        r = ca_remote_set_log_level(rr, arg_log_level);
+        	if (r < 0)
+        		return log_error_errno(r, "Failed to set log level: %m");
+	}
+
         if (arg_rate_limit_bps != UINT64_MAX) {
                 r = ca_remote_set_rate_limit_bps(rr, arg_rate_limit_bps);
                 if (r < 0)
@@ -3586,6 +3616,12 @@ static int verb_push(int argc, char *argv[]) {
                                               (archive_path ? CA_PROTOCOL_WRITABLE_ARCHIVE : 0));
         if (r < 0)
                 return log_error_errno(r, "Failed to set feature flags: %m");
+
+        if (arg_log_level != -1) {
+                r = ca_remote_set_log_level(rr, arg_log_level);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to set log level: %m");
+        }
 
         if (arg_rate_limit_bps != UINT64_MAX) {
                 r = ca_remote_set_rate_limit_bps(rr, arg_rate_limit_bps);
