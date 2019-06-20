@@ -426,22 +426,18 @@ static int acquire_chunk(const char *url,
                 goto finish;
         }
 
-        if (curl_easy_setopt(curl, CURLOPT_URL, url) != CURLE_OK) {
-                log_error("Failed to set CURL URL to: %s", url);
+        if (curl_easy_setopt(curl, CURLOPT_PROTOCOLS, arg_protocol == ARG_PROTOCOL_FTP ? CURLPROTO_FTP :
+                                                      arg_protocol == ARG_PROTOCOL_SFTP? CURLPROTO_SFTP: CURLPROTO_HTTP|CURLPROTO_HTTPS) != CURLE_OK) {
+                log_error("Failed to limit protocols to HTTP/HTTPS/FTP/SFTP.");
                 r = -EIO;
                 goto finish;
         }
 
-        if (curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback) != CURLE_OK) {
-                log_error("Failed to set CURL callback function.");
-                r = -EIO;
-                goto finish;
-        }
-
-        if (curl_easy_setopt(curl, CURLOPT_WRITEDATA, userdata) != CURLE_OK) {
-                log_error("Failed to set CURL private data.");
-                r = -EIO;
-                goto finish;
+        if (arg_protocol == ARG_PROTOCOL_SFTP) {
+                /* activate the ssh agent. For this to work you need
+                   to have ssh-agent running (type set | grep SSH_AGENT to check) */
+                if (curl_easy_setopt(curl, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_AGENT) != CURLE_OK)
+                        log_error("Failed to turn on ssh agent support, ignoring.");
         }
 
         if (curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4)) {
@@ -464,6 +460,30 @@ static int acquire_chunk(const char *url,
                 }
         }
 
+        if (curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level >= 6)) {
+                log_error("Failed to set CURL verbose.");
+                r = -EIO;
+                goto finish;
+        }
+
+        if (curl_easy_setopt(curl, CURLOPT_URL, url) != CURLE_OK) {
+                log_error("Failed to set CURL URL to: %s", url);
+                r = -EIO;
+                goto finish;
+        }
+
+        if (curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback) != CURLE_OK) {
+                log_error("Failed to set CURL callback function.");
+                r = -EIO;
+                goto finish;
+        }
+
+        if (curl_easy_setopt(curl, CURLOPT_WRITEDATA, userdata) != CURLE_OK) {
+                log_error("Failed to set CURL private data.");
+                r = -EIO;
+                goto finish;
+        }
+
         log_debug("Acquiring %s...", url);
 
         if (robust_curl_easy_perform(curl) != CURLE_OK) {
@@ -478,15 +498,21 @@ static int acquire_chunk(const char *url,
                 goto finish;
         }
 
-        if ((IN_SET(arg_protocol, ARG_PROTOCOL_HTTP, ARG_PROTOCOL_HTTPS) && protocol_status == 200) ||
-            (arg_protocol == ARG_PROTOCOL_FTP && (protocol_status >= 200 && protocol_status <= 299))||
-            (arg_protocol == ARG_PROTOCOL_SFTP && (protocol_status == 0)))
-		r = 0;
-        else {
+        if (IN_SET(arg_protocol, ARG_PROTOCOL_HTTP, ARG_PROTOCOL_HTTPS) && protocol_status != 200) {
                 if (arg_verbose)
-                        log_error("HTTP/FTP/SFTP server failure %li while requesting %s.", protocol_status, url);
+                        log_error("HTTP server failure %li while requesting %s.", protocol_status, url);
 
-                r = 1;
+                r = 0;
+        } else if (arg_protocol == ARG_PROTOCOL_FTP && (protocol_status < 200 || protocol_status > 299)) {
+                if (arg_verbose)
+                        log_error("FTP server failure %li while requesting %s.", protocol_status, url);
+
+                r = 0;
+        } else if (arg_protocol == ARG_PROTOCOL_SFTP && (protocol_status != 0)) {
+                if (arg_verbose)
+                        log_error("SFTP server failure %li while requesting %s.", protocol_status, url);
+
+                r = 0;
         }
 
 finish:
@@ -630,9 +656,9 @@ static int run(int argc, char *argv[]) {
                                 goto finish;
                         }
 
-                        r = ca_remote_put_chunk(rr, &id, CA_CHUNK_COMPRESSED, realloc_buffer_data(&chunk_buffer), realloc_buffer_size(&chunk_buffer));
+                        r = ca_remote_put_missing(rr, &id);
                         if (r < 0) {
-                                log_error_errno(r, "Failed to write chunk: %m");
+                                log_error_errno(r, "Failed to write missing message: %m");
                                 goto finish;
                         }
                 } else {
@@ -642,9 +668,9 @@ static int run(int argc, char *argv[]) {
                                 goto finish;
                         }
 
-                        r = ca_remote_put_missing(rr, &id);
+                        r = ca_remote_put_chunk(rr, &id, CA_CHUNK_COMPRESSED, realloc_buffer_data(&chunk_buffer), realloc_buffer_size(&chunk_buffer));
                         if (r < 0) {
-                                log_error_errno(r, "Failed to write missing message: %m");
+                                log_error_errno(r, "Failed to write chunk: %m");
                                 goto finish;
                         }
                 }
