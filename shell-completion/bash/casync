@@ -121,8 +121,8 @@ _casync() {
                 if [[ $args -eq 2 ]]; then
                     _filedir '@(caibx|caidx|catar)'
                 elif [[ $args -eq 3 ]]; then
-                    __casync_get_arg_n '=' "$opts_arg" '' 2
-                    if [[ $command == extract ]] &&
+                    __casync_get_arg_n ':=' "$opts_arg" '' 2
+                    if [[ $command == extract ]] && [[ -e $arg ]] &&
                        [[ $arg =~ \.(caidx|catar)$ ]]; then
                         __casync_list "$arg"
                     else
@@ -137,8 +137,9 @@ _casync() {
                 if [[ $args -eq 2 ]]; then
                     _filedir
                 elif [[ $args -eq 3 ]]; then
-                    __casync_get_arg_n '=' "$opts_arg" '' 2
-                    if [[ $arg =~ \.(caidx|catar)$ ]]; then
+                    __casync_get_arg_n ':=' "$opts_arg" '' 2
+                    if [[ -e $arg ]] &&
+                       [[ $arg =~ \.(caidx|catar)$ ]]; then
                         __casync_list "$arg"
                     else
                         _filedir
