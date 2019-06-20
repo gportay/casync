@@ -291,7 +291,8 @@ static char *chunk_url(const char *store_url, const CaChunkID *id) {
 
 static int acquire_file(CaRemote *rr,
                         const char *url,
-                        size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata)) {
+                        size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata),
+                        void *userdata) {
 
         long protocol_status;
         CURL *curl;
@@ -358,7 +359,7 @@ static int acquire_file(CaRemote *rr,
                 goto finish;
         }
 
-        if (curl_easy_setopt(curl, CURLOPT_WRITEDATA, rr) != CURLE_OK) {
+        if (curl_easy_setopt(curl, CURLOPT_WRITEDATA, userdata) != CURLE_OK) {
                 log_error("Failed to set CURL private data.");
                 r = -EIO;
                 goto finish;
@@ -491,7 +492,7 @@ static int run(int argc, char *argv[]) {
         }
 
         if (archive_url) {
-                r = acquire_file(rr, archive_url, write_archive);
+                r = acquire_file(rr, archive_url, write_archive, rr);
                 if (r < 0)
                         goto finish;
                 if (r == 0)
@@ -503,7 +504,7 @@ static int run(int argc, char *argv[]) {
         }
 
         if (index_url) {
-                r = acquire_file(rr, index_url, write_index);
+                r = acquire_file(rr, index_url, write_index, rr);
                 if (r < 0)
                         goto finish;
                 if (r == 0)
