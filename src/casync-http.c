@@ -356,7 +356,8 @@ static char *chunk_url(const char *store_url, const CaChunkID *id) {
 
 static int acquire_file(CaRemote *rr,
                         const char *url,
-                        size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata)) {
+                        size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata),
+                        void *userdata) {
         CURLcode c;
         long protocol_status;
         _cleanup_(curl_easy_cleanupp) CURL *curl = NULL;
@@ -405,7 +406,7 @@ static int acquire_file(CaRemote *rr,
         if (c != CURLE_OK)
                 return log_error_curle(c, "Failed to set CURLOPT_WRITEFUNCTION");
 
-        c = curl_easy_setopt(curl, CURLOPT_WRITEDATA, rr);
+        c = curl_easy_setopt(curl, CURLOPT_WRITEDATA, userdata);
         if (c != CURLE_OK)
                 return log_error_curle(c, "Failed to set CURLOPT_WRITEDATA");
 
@@ -529,7 +530,7 @@ static int run(int argc, char *argv[]) {
                 return log_error_curle(c, "Failed to set CURLOPT_VERBOSECURL");
 
         if (archive_url) {
-                r = acquire_file(rr, archive_url, write_archive);
+                r = acquire_file(rr, archive_url, write_archive, rr);
                 if (r < 0)
                         return r;
                 if (r == 0)
@@ -541,7 +542,7 @@ static int run(int argc, char *argv[]) {
         }
 
         if (index_url) {
-                r = acquire_file(rr, index_url, write_index);
+                r = acquire_file(rr, index_url, write_index, rr);
                 if (r < 0)
                         return r;
                 if (r == 0)
