@@ -290,41 +290,92 @@ static char *chunk_url(const char *store_url, const CaChunkID *id) {
 }
 
 static int acquire_file(CaRemote *rr,
-                        CURL *curl,
                         const char *url,
                         size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata)) {
 
         long protocol_status;
+        CURL *curl;
+        int r = 1;
 
-        assert(curl);
         assert(url);
         assert(callback);
 
+        curl = curl_easy_init();
+        if (!curl) {
+                r = log_oom();
+                goto finish;
+        }
+
+        if (curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK) {
+                log_error("Failed to turn on location following.");
+                r = -EIO;
+                goto finish;
+        }
+
+        if (curl_easy_setopt(curl, CURLOPT_PROTOCOLS, arg_protocol == ARG_PROTOCOL_FTP ? CURLPROTO_FTP :
+                                                      arg_protocol == ARG_PROTOCOL_SFTP? CURLPROTO_SFTP: CURLPROTO_HTTP|CURLPROTO_HTTPS) != CURLE_OK) {
+                log_error("Failed to limit protocols to HTTP/HTTPS/FTP/SFTP.");
+                r = -EIO;
+                goto finish;
+        }
+
+        if (arg_protocol == ARG_PROTOCOL_SFTP) {
+                /* activate the ssh agent. For this to work you need
+                   to have ssh-agent running (type set | grep SSH_AGENT to check) */
+                if (curl_easy_setopt(curl, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_AGENT) != CURLE_OK)
+                        log_error("Failed to turn on ssh agent support, ignoring.");
+        }
+
+        if (curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4)) {
+                log_error("Failed to set CURL verbosity.");
+                r = -EIO;
+                goto finish;
+        }
+
+        if (arg_rate_limit_bps > 0) {
+                if (curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
+                        log_error("Failed to set CURL send speed limit.");
+                        r = -EIO;
+                        goto finish;
+                }
+
+                if (curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
+                        log_error("Failed to set CURL receive speed limit.");
+                        r = -EIO;
+                        goto finish;
+                }
+        }
+
         if (curl_easy_setopt(curl, CURLOPT_URL, url) != CURLE_OK) {
                 log_error("Failed to set CURL URL to: %s", url);
-                return -EIO;
+                r = -EIO;
+                goto finish;
         }
 
         if (curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback) != CURLE_OK) {
                 log_error("Failed to set CURL callback function.");
-                return -EIO;
+                r = -EIO;
+                goto finish;
         }
 
         if (curl_easy_setopt(curl, CURLOPT_WRITEDATA, rr) != CURLE_OK) {
                 log_error("Failed to set CURL private data.");
-                return -EIO;
+                r = -EIO;
+                goto finish;
         }
 
         log_debug("Acquiring %s...", url);
 
         if (robust_curl_easy_perform(curl) != CURLE_OK) {
                 log_error("Failed to acquire %s", url);
-                return -EIO;
+                r = -EIO;
+                goto finish;
         }
 
         if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &protocol_status) != CURLE_OK) {
                 log_error("Failed to query response code");
-                return -EIO;
+                r = -EIO;
+                goto finish;
         }
 
         if (IN_SET(arg_protocol, ARG_PROTOCOL_HTTP, ARG_PROTOCOL_HTTPS) && protocol_status != 200) {
@@ -333,41 +384,49 @@ static int acquire_file(CaRemote *rr,
                 if (arg_verbose)
                         log_error("HTTP server failure %li while requesting %s.", protocol_status, url);
 
-                if (asprintf(&m, "HTTP request on %s failed with status %li", url, protocol_status) < 0)
-                        return log_oom();
+                if (asprintf(&m, "HTTP request on %s failed with status %li", url, protocol_status) < 0) {
+                        r = log_oom();
+                        goto finish;
+                }
 
                 (void) ca_remote_abort(rr, protocol_status == 404 ? ENOMEDIUM : EBADR, m);
                 free(m);
-
-                return 0;
-
+                r = 0;
         } else if (arg_protocol == ARG_PROTOCOL_FTP && (protocol_status < 200 || protocol_status > 299)) {
                 char *m;
 
                 if (arg_verbose)
                         log_error("FTP server failure %li while requesting %s.", protocol_status, url);
 
-                if (asprintf(&m, "FTP request on %s failed with status %li", url, protocol_status) < 0)
-                        return log_oom();
+                if (asprintf(&m, "FTP request on %s failed with status %li", url, protocol_status) < 0) {
+                        r = log_oom();
+                        goto finish;
+                }
 
                 (void) ca_remote_abort(rr, EBADR, m);
                 free(m);
-                return 0;
+                r = 0;
         } else if (arg_protocol == ARG_PROTOCOL_SFTP && (protocol_status != 0)) {
                 char *m;
 
                 if (arg_verbose)
                         log_error("SFTP server failure %li while requesting %s.", protocol_status, url);
 
-                if (asprintf(&m, "SFTP request on %s failed with status %li", url, protocol_status) < 0)
-                        return log_oom();
+                if (asprintf(&m, "SFTP request on %s failed with status %li", url, protocol_status) < 0) {
+                        r = log_oom();
+                        goto finish;
+                }
 
                 (void) ca_remote_abort(rr, EBADR, m);
                 free(m);
-                return 0;
+                r = 0;
         }
 
-        return 1;
+finish:
+        if (curl)
+                curl_easy_cleanup(curl);
+
+        return r;
 }
 
 static int run(int argc, char *argv[]) {
@@ -431,48 +490,8 @@ static int run(int argc, char *argv[]) {
                 goto finish;
         }
 
-        if (curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK) {
-                log_error("Failed to turn on location following.");
-                r = -EIO;
-                goto finish;
-        }
-
-        if (curl_easy_setopt(curl, CURLOPT_PROTOCOLS, arg_protocol == ARG_PROTOCOL_FTP ? CURLPROTO_FTP :
-                                                      arg_protocol == ARG_PROTOCOL_SFTP? CURLPROTO_SFTP: CURLPROTO_HTTP|CURLPROTO_HTTPS) != CURLE_OK) {
-                log_error("Failed to limit protocols to HTTP/HTTPS/FTP/SFTP.");
-                r = -EIO;
-                goto finish;
-        }
-
-        if (arg_protocol == ARG_PROTOCOL_SFTP) {
-                /* activate the ssh agent. For this to work you need
-                   to have ssh-agent running (type set | grep SSH_AGENT to check) */
-                if (curl_easy_setopt(curl, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_AGENT) != CURLE_OK)
-                        log_error("Failed to turn on ssh agent support, ignoring.");
-        }
-
-        if (arg_rate_limit_bps > 0) {
-                if (curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
-                        log_error("Failed to set CURL send speed limit.");
-                        r = -EIO;
-                        goto finish;
-                }
-
-                if (curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
-                        log_error("Failed to set CURL receive speed limit.");
-                        r = -EIO;
-                        goto finish;
-                }
-        }
-
-        if (curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4)) {
-                log_error("Failed to set CURL verbosity.");
-                r = -EIO;
-                goto finish;
-        }
-
         if (archive_url) {
-                r = acquire_file(rr, curl, archive_url, write_archive);
+                r = acquire_file(rr, archive_url, write_archive);
                 if (r < 0)
                         goto finish;
                 if (r == 0)
@@ -484,7 +503,7 @@ static int run(int argc, char *argv[]) {
         }
 
         if (index_url) {
-                r = acquire_file(rr, curl, index_url, write_index);
+                r = acquire_file(rr, index_url, write_index);
                 if (r < 0)
                         goto finish;
                 if (r == 0)
