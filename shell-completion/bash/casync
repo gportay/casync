@@ -151,10 +151,16 @@ _casync() {
             gc)
                 _filedir '@(caibx|caidx)'
                 ;;
-            # digest [ARCHIVE|BLOB|ARCHIVE_INDEX|BLOB_INDEX|DIRECTORY]
+            # digest [ARCHIVE|BLOB|ARCHIVE_INDEX|BLOB_INDEX|DIRECTORY] [PATH]
             digest)
                 if [[ $args -eq 2 ]]; then
                     _filedir
+                elif [[ $args -eq 3 ]]; then
+                    __casync_get_arg_n ':=' "$opts_argument" '' 2
+                    if [[ -e $arg ]] &&
+                       [[ $arg =~ \.(caidx|catar)$ ]]; then
+                        __casync_list "$arg"
+                    fi
                 fi
                 ;;
         esac
