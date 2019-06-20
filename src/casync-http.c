@@ -354,8 +354,7 @@ static char *chunk_url(const char *store_url, const CaChunkID *id) {
         return buffer;
 }
 
-static int acquire_file(CaRemote *rr,
-                        const char *url,
+static int acquire_file(const char *url,
                         size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata),
                         void *userdata) {
         CURLcode c;
@@ -422,7 +421,6 @@ static int acquire_file(CaRemote *rr,
 
         if (!protocol_status_ok(arg_protocol, protocol_status)) {
                 _cleanup_free_ char *m = NULL;
-                int abort_code;
 
                 if (arg_verbose)
                         log_error("%s server failure %li while requesting %s",
@@ -433,12 +431,9 @@ static int acquire_file(CaRemote *rr,
                         return log_oom();
 
                 if (IN_SET(arg_protocol, PROTOCOL_HTTP, PROTOCOL_HTTPS) && protocol_status == 404)
-                        abort_code = ENOMEDIUM;
+                        return -ENOMEDIUM;
                 else
-                        abort_code = EBADR;
-
-                (void) ca_remote_abort(rr, abort_code, m);
-                return 0;
+                        return -EBADR;
         }
 
         return 1;
@@ -530,11 +525,12 @@ static int run(int argc, char *argv[]) {
                 return log_error_curle(c, "Failed to set CURLOPT_VERBOSECURL");
 
         if (archive_url) {
-                r = acquire_file(rr, archive_url, write_archive, rr);
-                if (r < 0)
-                        return r;
-                if (r == 0)
+                r = acquire_file(archive_url, write_archive, rr);
+                if (r == -ENOMEDIUM || r == -EBADR) {
+                        (void) ca_remote_abort(rr, -r, "Failed");
                         goto flush;
+                } else if (r < 0)
+                        return r;
 
                 r = write_archive_eof(rr);
                 if (r < 0)
@@ -542,11 +538,12 @@ static int run(int argc, char *argv[]) {
         }
 
         if (index_url) {
-                r = acquire_file(rr, index_url, write_index, rr);
-                if (r < 0)
-                        return r;
-                if (r == 0)
+                r = acquire_file(index_url, write_index, rr);
+                if (r == -ENOMEDIUM || r == -EBADR) {
+                        (void) ca_remote_abort(rr, -r, "Failed");
                         goto flush;
+                } else if (r < 0)
+                        return r;
 
                 r = write_index_eof(rr);
                 if (r < 0)
