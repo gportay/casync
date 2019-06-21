@@ -290,8 +290,7 @@ static char *chunk_url(const char *store_url, const CaChunkID *id) {
         return buffer;
 }
 
-static int acquire_file(CaRemote *rr,
-                        const char *url,
+static int acquire_file(const char *url,
                         size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata),
                         void *userdata) {
 
@@ -381,46 +380,19 @@ static int acquire_file(CaRemote *rr,
         }
 
         if (IN_SET(arg_protocol, ARG_PROTOCOL_HTTP, ARG_PROTOCOL_HTTPS) && protocol_status != 200) {
-                char *m;
-
                 if (arg_verbose)
                         log_error("HTTP server failure %li while requesting %s.", protocol_status, url);
 
-                if (asprintf(&m, "HTTP request on %s failed with status %li", url, protocol_status) < 0) {
-                        r = log_oom();
-                        goto finish;
-                }
-
-                (void) ca_remote_abort(rr, protocol_status == 404 ? ENOMEDIUM : EBADR, m);
-                free(m);
                 r = 0;
         } else if (arg_protocol == ARG_PROTOCOL_FTP && (protocol_status < 200 || protocol_status > 299)) {
-                char *m;
-
                 if (arg_verbose)
                         log_error("FTP server failure %li while requesting %s.", protocol_status, url);
 
-                if (asprintf(&m, "FTP request on %s failed with status %li", url, protocol_status) < 0) {
-                        r = log_oom();
-                        goto finish;
-                }
-
-                (void) ca_remote_abort(rr, EBADR, m);
-                free(m);
                 r = 0;
         } else if (arg_protocol == ARG_PROTOCOL_SFTP && (protocol_status != 0)) {
-                char *m;
-
                 if (arg_verbose)
                         log_error("SFTP server failure %li while requesting %s.", protocol_status, url);
 
-                if (asprintf(&m, "SFTP request on %s failed with status %li", url, protocol_status) < 0) {
-                        r = log_oom();
-                        goto finish;
-                }
-
-                (void) ca_remote_abort(rr, EBADR, m);
-                free(m);
                 r = 0;
         }
 
@@ -493,11 +465,13 @@ static int run(int argc, char *argv[]) {
         }
 
         if (archive_url) {
-                r = acquire_file(rr, archive_url, write_archive, rr);
+                r = acquire_file(archive_url, write_archive, rr);
                 if (r < 0)
                         goto finish;
-                if (r == 0)
+                if (r == 0) {
+                        (void) ca_remote_abort(rr, EBADR, "Failed");
                         goto flush;
+                }
 
                 r = write_archive_eof(rr);
                 if (r < 0)
@@ -505,11 +479,13 @@ static int run(int argc, char *argv[]) {
         }
 
         if (index_url) {
-                r = acquire_file(rr, index_url, write_index, rr);
+                r = acquire_file(index_url, write_index, rr);
                 if (r < 0)
                         goto finish;
-                if (r == 0)
+                if (r == 0) {
+                        (void) ca_remote_abort(rr, EBADR, "Failed");
                         goto flush;
+                }
 
                 r = write_index_eof(rr);
                 if (r < 0)
