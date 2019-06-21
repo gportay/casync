@@ -11,6 +11,7 @@
 #include "realloc-buffer.h"
 #include "parse-util.h"
 #include "util.h"
+#include "list.h"
 
 static volatile sig_atomic_t quit = false;
 
@@ -83,6 +84,41 @@ DEFINE_TRIVIAL_CLEANUP_FUNC(CURL*, curl_easy_cleanup);
 #define log_error_curle(code, fmt, ...)                                 \
         log_error_errno(-EIO, fmt ": %s", ##__VA_ARGS__, curl_easy_strerror(code))
 
+#define log_error_curlm(code, fmt, ...)                                 \
+        log_error_errno(-EIO, fmt ": %s", ##__VA_ARGS__, curl_multi_strerror(code))
+
+typedef struct CaChunk {
+        unsigned n_ref;
+        CaChunkID id;
+        CURL *curl;
+        ReallocBuffer buffer;
+        LIST_FIELDS(struct CaChunk, list);
+        char **stores;
+        size_t n_stores;
+        size_t current_store;
+} CaChunk;
+
+static CaChunk *ca_chunk_new(CaChunkID *id, char **stores, size_t n_stores);
+static CaChunk *ca_chunk_ref(CaChunk *c);
+CaChunk* ca_chunk_unref(CaChunk *c);
+static inline void ca_chunk_unrefp(CaChunk **c) {
+        ca_chunk_unref(*c);
+}
+static const char *ca_chunk_get_url(CaChunk *c);
+static int ca_chunk_acquire_file(CaChunk *c, CURLM *curlm);
+static int ca_chunk_acquire_file_end(CaChunk *c, CURLM *curlm);
+
+typedef struct CaProcess {
+        CaRemote *remote;
+        CURLM *curlm;
+        int still_running;
+        LIST_HEAD(CaChunk, chunks);
+} CaProcess;
+
+static CaProcess *ca_process_new(CaRemote *rr);
+static CaProcess *ca_process_free(CaProcess *p);
+DEFINE_TRIVIAL_CLEANUP_FUNC(CaProcess*, ca_process_free);
+
 static CURLcode robust_curl_easy_perform(CURL *curl) {
         uint64_t sleep_base_usec = 100 * 1000;
         unsigned trial = 1;
@@ -122,10 +158,12 @@ static CURLcode robust_curl_easy_perform(CURL *curl) {
         return c;
 }
 
-static int process_remote(CaRemote *rr, ProcessUntil until) {
+static int ca_process_remote(CaProcess *p, ProcessUntil until) {
+        CaRemote *rr;
         int r;
 
-        assert(rr);
+        assert(p);
+        rr = p->remote;
 
         for (;;) {
 
@@ -211,6 +249,108 @@ static int process_remote(CaRemote *rr, ProcessUntil until) {
                 if (r != CA_REMOTE_POLL)
                         continue;
 
+                if (p->curlm) {
+                        do {
+                                struct curl_waitfd pollfd[2];
+                                CURLMcode mc;
+                                CURLMsg *msg;
+                                CaChunk *c;
+                                int n, msgs_left;
+
+                                mc = curl_multi_perform(p->curlm, &p->still_running);
+                                if (mc != CURLM_OK)
+                                        return log_error_curlm(mc, "Failed to call curl_multi_perform");
+
+                                if (p->still_running)
+                                        log_debug("Still acquiring %d chunk(s)...", p->still_running);
+                                else
+                                        log_debug("Waiting for I/O...");
+
+                                r = ca_remote_get_io_fds(rr, &pollfd[0].fd, &pollfd[1].fd);
+                                if (r < 0)
+                                        return log_error_errno(r, "Failed to get IO fds");
+
+                                r = ca_remote_get_io_events(rr, &pollfd[0].events, &pollfd[1].events);
+                                if (r < 0)
+                                        return log_error_errno(r, "Failed to get IO events");
+
+                                /* FIXME Without a timeout, casync-http never ends; and thus causes casync to run till the end of time!
+                                 * After the chunks are all proceeded, it waits for something to happen on stdin... but nothing is going to happen :(
+                                 *
+                                 * Setting a timeout forces the poll to return after it has reached (i.e. curl_multi_wait());
+                                 *  - that breaks the loop do { ... } while() (both n and still_running are 0);
+                                 *  - the next call to ca_remote_has_pending_requests() returns -EPIPE,
+                                 *  - that causes ca_remote_process() to return -EPIPE has well,
+                                 *  - and causes the run() function to return from its infinite for() loop,
+                                 *  - that finally end the process casync-http with success.
+                                 *  
+                                 * Something is probably not ready yet to process simultaneously have_request and put_chunk; casync side, in its state machine.
+                                 */
+                                if (curl_multi_wait(p->curlm, pollfd, 2, 1000, &n) != CURLM_OK)
+                                        return log_error_errno(EIO, "Failed to call curl_multi_wait");
+
+                                while ((msg = curl_multi_info_read(p->curlm, &msgs_left))) {
+                                        log_debug("%d messages left...", n);
+                                        assert(msg->msg == CURLMSG_DONE);
+                                        if (msg->msg != CURLMSG_DONE)
+                                                continue;
+
+                                        LIST_FOREACH(list, c, p->chunks) {
+                                                if (msg->easy_handle == c->curl)
+                                                        break;
+                                        }
+
+                                        if (!c)
+                                                return log_error_errno(EIO, "Failed to find handle");;
+
+                                        r = ca_chunk_acquire_file_end(c, p->curlm);
+                                        if (r == -ENOMEDIUM || r == -EBADR)
+                                                r = 0;
+                                        if (r < 0)
+                                                return r;
+
+                                        if (r == 0) {
+                                                r = ca_process_remote(p, PROCESS_UNTIL_CAN_PUT_CHUNK);
+                                                if (r == -EPIPE)
+                                                        return r;
+
+                                                r = ca_remote_put_missing(rr, &c->id);
+                                                if (r < 0)
+                                                        return log_error_errno(r, "Failed to write missing message: %m");
+
+                                                r = ca_process_remote(p, PROCESS_UNTIL_WRITTEN);
+                                                if (r == -EPIPE)
+                                                        return 0;
+                                                if (r < 0)
+                                                        return r;
+                                        } else {
+                                                r = ca_process_remote(p, PROCESS_UNTIL_CAN_PUT_CHUNK);
+                                                if (r == -EPIPE)
+                                                        return r;
+
+                                                r = ca_remote_put_chunk(rr, &c->id, CA_CHUNK_COMPRESSED, realloc_buffer_data(&c->buffer), realloc_buffer_size(&c->buffer));
+                                                if (r < 0)
+                                                        return log_error_errno(r, "Failed to write chunk: %m");
+
+                                                r = ca_process_remote(p, PROCESS_UNTIL_WRITTEN);
+                                                if (r == -EPIPE)
+                                                        return 0;
+                                                if (r < 0)
+                                                        return r;
+                                        }
+
+                                        LIST_REMOVE(list, p->chunks, c);
+                                        ca_chunk_unref(c);
+                                }
+
+                                log_debug("%d event(s)...", n);
+                                if (n > 0)
+                                        break;
+                        } while (p->still_running);
+
+                        continue;
+                }
+
                 r = ca_remote_poll(rr, UINT64_MAX, NULL);
                 if (r < 0)
                         return log_error_errno(r, "Failed to poll remoting engine: %m");
@@ -218,13 +358,18 @@ static int process_remote(CaRemote *rr, ProcessUntil until) {
 }
 
 static size_t write_index(const void *buffer, size_t size, size_t nmemb, void *userdata) {
-        CaRemote *rr = userdata;
+        CaProcess *p = userdata;
         size_t product;
+        CaRemote *rr;
         int r;
 
+        assert(p);
+        assert(p->remote);
+
+        rr = p->remote;
         product = size * nmemb;
 
-        r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_INDEX);
+        r = ca_process_remote(p, PROCESS_UNTIL_CAN_PUT_INDEX);
         if (r < 0)
                 return 0;
 
@@ -234,19 +379,23 @@ static size_t write_index(const void *buffer, size_t size, size_t nmemb, void *u
                 return 0;
         }
 
-        r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
+        r = ca_process_remote(p, PROCESS_UNTIL_WRITTEN);
         if (r < 0)
                 return r;
 
         return product;
 }
 
-static int write_index_eof(CaRemote *rr) {
+static int write_index_eof(CaProcess *p) {
+        CaRemote *rr;
         int r;
 
-        assert(rr);
+        assert(p);
+        assert(p->remote);
 
-        r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_INDEX);
+        rr = p->remote;
+
+        r = ca_process_remote(p, PROCESS_UNTIL_CAN_PUT_INDEX);
         if (r < 0)
                 return r;
 
@@ -254,7 +403,7 @@ static int write_index_eof(CaRemote *rr) {
         if (r < 0)
                 return log_error_errno(r, "Failed to put index EOF: %m");
 
-        r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
+        r = ca_process_remote(p, PROCESS_UNTIL_WRITTEN);
         if (r < 0)
                 return r;
 
@@ -262,13 +411,18 @@ static int write_index_eof(CaRemote *rr) {
 }
 
 static size_t write_archive(const void *buffer, size_t size, size_t nmemb, void *userdata) {
-        CaRemote *rr = userdata;
+        CaProcess *p = userdata;
         size_t product;
+        CaRemote *rr;
         int r;
 
+        assert(p);
+        assert(p->remote);
+
+        rr = p->remote;
         product = size * nmemb;
 
-        r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_ARCHIVE);
+        r = ca_process_remote(p, PROCESS_UNTIL_CAN_PUT_ARCHIVE);
         if (r < 0)
                 return 0;
 
@@ -278,19 +432,23 @@ static size_t write_archive(const void *buffer, size_t size, size_t nmemb, void 
                 return 0;
         }
 
-        r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
+        r = ca_process_remote(p, PROCESS_UNTIL_WRITTEN);
         if (r < 0)
                 return r;
 
         return product;
 }
 
-static int write_archive_eof(CaRemote *rr) {
+static int write_archive_eof(CaProcess *p) {
+        CaRemote *rr;
         int r;
 
-        assert(rr);
+        assert(p);
+        assert(p->remote);
 
-        r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_ARCHIVE);
+        rr = p->remote;
+
+        r = ca_process_remote(p, PROCESS_UNTIL_CAN_PUT_ARCHIVE);
         if (r < 0)
                 return r;
 
@@ -298,7 +456,7 @@ static int write_archive_eof(CaRemote *rr) {
         if (r < 0)
                 return log_error_errno(r, "Failed to put archive EOF: %m");
 
-        r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
+        r = ca_process_remote(p, PROCESS_UNTIL_WRITTEN);
         if (r < 0)
                 return r;
 
@@ -354,11 +512,11 @@ static char *chunk_url(const char *store_url, const CaChunkID *id) {
         return buffer;
 }
 
-static int acquire_file(const char *url,
-                        size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata),
-                        void *userdata) {
+static int make_easy(CURL **ret,
+                     const char *url,
+                     size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata),
+                     void *userdata) {
         CURLcode c;
-        long protocol_status;
         _cleanup_(curl_easy_cleanupp) CURL *curl = NULL;
 
         assert(url);
@@ -409,11 +567,15 @@ static int acquire_file(const char *url,
         if (c != CURLE_OK)
                 return log_error_curle(c, "Failed to set CURLOPT_WRITEDATA");
 
-        log_debug("Acquiring %s...", url);
+        if (ret)
+                *ret = TAKE_PTR(curl);
 
-        c = robust_curl_easy_perform(curl);
-        if (c != CURLE_OK)
-                return log_error_curle(c, "Failed to acquire %s", url);
+        return 0;
+}
+
+static int get_easy(CURL *curl, const char *url) {
+        long protocol_status;
+        CURLcode c;
 
         c = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &protocol_status);
         if (c != CURLE_OK)
@@ -439,12 +601,184 @@ static int acquire_file(const char *url,
         return 1;
 }
 
+static int acquire_file_multi(CURL **ret,
+                              CURLM *curlm,
+                              const char *url,
+                              size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata),
+                              void *userdata) {
+        CURLcode ec;
+        CURL* curl;
+        int r;
+        
+        r = make_easy(&curl, url, callback, userdata);
+        if (r < 0)
+                return r;
+
+        if (curlm) {
+                CURLMcode mc;
+
+                if (ret)
+                        *ret = curl;
+
+                mc = curl_multi_add_handle(curlm, curl);
+                if (mc != CURLM_OK)
+                        return log_error_curlm(mc, "Failed to call curl_multi_add_handle");
+
+                return -EAGAIN;
+        }
+
+        ec = robust_curl_easy_perform(curl);
+        if (ec != CURLE_OK)
+                return log_error_curle(ec, "Failed to acquire %s", url);
+
+        r = get_easy(curl, url);
+
+        curl_easy_cleanup(curl);
+
+        return r;
+}
+
+static int acquire_file(const char *url,
+                        size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata),
+                        void *userdata) {
+	return acquire_file_multi(NULL, NULL, url, callback, userdata);
+}
+
+static CaChunk *ca_chunk_new(CaChunkID *id, char **stores, size_t n_stores) {
+        CaChunk *c;
+
+        c = new0(CaChunk, 1);
+        if (!c)
+                return NULL;
+
+        c->n_ref = 1;
+
+        LIST_INIT(list, c);
+        memcpy(&c->id, id, sizeof(c->id));
+        c->stores = stores;
+        c->n_stores = n_stores;
+        c->current_store = 0;
+
+        return c;
+}
+
+static CaChunk *ca_chunk_ref(CaChunk *c) {
+        if (!c)
+                return NULL;
+
+        assert(c->n_ref > 0);
+        c->n_ref++;
+
+        return c;
+}
+
+CaChunk* ca_chunk_unref(CaChunk *c)
+{
+        if (!c)
+                return NULL;
+
+        assert(c->n_ref > 0);
+        c->n_ref--;
+
+        if (c->n_ref > 0)
+                return NULL;
+
+        if (c->curl)
+                curl_easy_cleanup(c->curl);
+
+        realloc_buffer_free(&c->buffer);
+
+        return mfree(c);
+}
+
+static const char *ca_chunk_get_url(CaChunk *c) {
+        CURLcode cr;
+        char *url;
+
+        if (!c)
+                return NULL;
+
+        cr = curl_easy_getinfo(c->curl, CURLINFO_EFFECTIVE_URL, &url);
+        if (cr != CURLE_OK) {
+                log_error_curle(cr, "Failed to set CURLINFO_EFFECTIVE_URL");
+                return NULL;
+        }
+
+        return url;
+}
+
+static int ca_chunk_acquire_file(CaChunk *c, CURLM *curlm)
+{
+        _cleanup_free_ char *url = NULL;
+
+        url = chunk_url(c->stores[c->current_store], &c->id);
+        if (!url)
+                return log_oom();
+
+        return acquire_file_multi(&c->curl, curlm, url, write_chunk, &c->buffer);
+}
+
+static int ca_chunk_acquire_file_end(CaChunk *c, CURLM *curlm)
+{
+        if (!c)
+                return -EINVAL;
+        if (!curlm)
+                return -EINVAL;
+
+        return get_easy(c->curl, ca_chunk_get_url(c));
+}
+
+static CaProcess *ca_process_new(CaRemote *rr) {
+        CaProcess *p;
+        CURLM *curlm;
+
+        if (!rr)
+                return NULL;
+
+        p = new0(CaProcess, 1);
+        if (!p)
+                return NULL;
+
+        LIST_HEAD_INIT(p->chunks);
+
+        if (getenv_bool("CASYNC_CURL_MULTI")) {
+                curlm = curl_multi_init();
+                if (!curlm) {
+                        free(p);
+                        return NULL;
+                }
+
+                p->curlm = curlm;
+        }
+
+        p->remote = rr;
+
+        return p;
+}
+
+static CaProcess *ca_process_free(CaProcess *p) {
+        CaChunk *c;
+
+        if (!p)
+                return NULL;
+
+        LIST_FOREACH(list, c, p->chunks) {
+                ca_chunk_unref(c);
+        }
+
+        if (p->curlm)
+                curl_multi_cleanup(p->curlm);
+
+        return mfree(p);
+}
+
 static int run(int argc, char *argv[]) {
         const char *base_url, *archive_url, *index_url, *wstore_url;
-        size_t n_stores = 0, current_store = 0;
+        size_t n_stores = 0;
+        char **stores;
+        _cleanup_(ca_process_freep) CaProcess *p = NULL;
         _cleanup_(ca_remote_unrefp) CaRemote *rr = NULL;
         _cleanup_(realloc_buffer_free) ReallocBuffer chunk_buffer = {};
-        _cleanup_free_ char *url_buffer = NULL;
         int r;
 
         if (argc < _CA_REMOTE_ARG_MAX) {
@@ -460,6 +794,10 @@ static int run(int argc, char *argv[]) {
         wstore_url = empty_or_dash_to_null(argv[CA_REMOTE_ARG_WSTORE_URL]);
 
         n_stores = !!wstore_url + (argc - _CA_REMOTE_ARG_MAX);
+        if (wstore_url)
+                stores = &argv[_CA_REMOTE_ARG_MAX - 1];
+        else
+                stores = &argv[_CA_REMOTE_ARG_MAX];
 
         if (base_url) {
                 log_error("Pushing/pulling to base via HTTP not yet supported.");
@@ -486,34 +824,38 @@ static int run(int argc, char *argv[]) {
         if (r < 0)
                 return log_error_errno(r, "Failed to set I/O file descriptors: %m");
 
+        p = ca_process_new(rr);
+        if (!p)
+                return log_oom();
+
         if (archive_url) {
-                r = acquire_file(archive_url, write_archive, rr);
+                r = acquire_file(archive_url, write_archive, p);
                 if (r == -ENOMEDIUM || r == -EBADR) {
                         (void) ca_remote_abort(rr, -r, "Failed");
                         goto flush;
                 } else if (r < 0)
                         return r;
 
-                r = write_archive_eof(rr);
+                r = write_archive_eof(p);
                 if (r < 0)
                         return r;
         }
 
         if (index_url) {
-                r = acquire_file(index_url, write_index, rr);
+                r = acquire_file(index_url, write_index, p);
                 if (r == -ENOMEDIUM || r == -EBADR) {
                         (void) ca_remote_abort(rr, -r, "Failed");
                         goto flush;
                 } else if (r < 0)
                         return r;
 
-                r = write_index_eof(rr);
+                r = write_index_eof(p);
                 if (r < 0)
                         return r;
         }
 
         for (;;) {
-                const char *store_url;
+                _cleanup_(ca_chunk_unrefp) CaChunk *c = NULL;
                 CaChunkID id;
 
                 if (quit) {
@@ -524,7 +866,7 @@ static int run(int argc, char *argv[]) {
                 if (n_stores == 0)  /* No stores? Then we did all we could do */
                         break;
 
-                r = process_remote(rr, PROCESS_UNTIL_HAVE_REQUEST);
+                r = ca_process_remote(p, PROCESS_UNTIL_HAVE_REQUEST);
                 if (r == -EPIPE)
                         return 0;
                 if (r < 0)
@@ -536,50 +878,54 @@ static int run(int argc, char *argv[]) {
                 if (r < 0)
                         return log_error_errno(r, "Failed to determine next chunk to get: %m");
 
-                current_store = current_store % n_stores;
-                if (wstore_url)
-                        store_url = current_store == 0 ? wstore_url : argv[current_store + _CA_REMOTE_ARG_MAX - 1];
-                else
-                        store_url = argv[current_store + _CA_REMOTE_ARG_MAX];
-                /* current_store++; */
-
-                free(url_buffer);
-                url_buffer = chunk_url(store_url, &id);
-                if (!url_buffer)
+                c = ca_chunk_new(&id, stores, n_stores);
+                if (!c)
                         return log_oom();
 
-                r = acquire_file(url_buffer, write_chunk, &chunk_buffer);
+                r = ca_chunk_acquire_file(c, p->curlm);
+                if (r == -EAGAIN) {
+                        LIST_APPEND(list, p->chunks, c);
+                        ca_chunk_ref(c);
+                        continue;
+                }
+                if (r == -ENOMEDIUM || r == -EBADR)
+                        r = 0;
                 if (r < 0)
                         return r;
-                if (r == 1) {
-                        r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_CHUNK);
-                        if (r == -EPIPE)
-                                return 0;
 
-                        r = ca_remote_put_chunk(rr, &id, CA_CHUNK_COMPRESSED, realloc_buffer_data(&chunk_buffer), realloc_buffer_size(&chunk_buffer));
-                        if (r < 0)
-                                return log_error_errno(r, "Failed to write chunk: %m");
-                } else {
-                        r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_CHUNK);
+                if (r == 0) {
+                        r = ca_process_remote(p, PROCESS_UNTIL_CAN_PUT_CHUNK);
                         if (r == -EPIPE)
-                                return 0;
+                                return r;
 
-                        r = ca_remote_put_missing(rr, &id);
+                        r = ca_remote_put_missing(rr, &c->id);
                         if (r < 0)
                                 return log_error_errno(r, "Failed to write missing message: %m");
+
+                        r = ca_process_remote(p, PROCESS_UNTIL_WRITTEN);
+                        if (r == -EPIPE)
+                                return 0;
+                        if (r < 0)
+                                return r;
+                } else {
+                        r = ca_process_remote(p, PROCESS_UNTIL_CAN_PUT_CHUNK);
+                        if (r == -EPIPE)
+                                return r;
+
+                        r = ca_remote_put_chunk(rr, &c->id, CA_CHUNK_COMPRESSED, realloc_buffer_data(&c->buffer), realloc_buffer_size(&c->buffer));
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to write chunk: %m");
+                        
+                        r = ca_process_remote(p, PROCESS_UNTIL_WRITTEN);
+                        if (r == -EPIPE)
+                                return 0;
+                        if (r < 0)
+                                return r;
                 }
-
-                realloc_buffer_empty(&chunk_buffer);
-
-                r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
-                if (r == -EPIPE)
-                        return 0;
-                if (r < 0)
-                        return r;
         }
 
 flush:
-        return process_remote(rr, PROCESS_UNTIL_FINISHED);
+        return ca_process_remote(p, PROCESS_UNTIL_FINISHED);
 }
 
 static void help(void) {
