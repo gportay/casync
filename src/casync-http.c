@@ -34,6 +34,8 @@ typedef enum ProcessUntil {
         PROCESS_UNTIL_FINISHED,
 } ProcessUntil;
 
+DEFINE_TRIVIAL_CLEANUP_FUNC(CURL*, curl_easy_cleanup);
+
 static CURLcode robust_curl_easy_perform(CURL *curl) {
         uint64_t sleep_base_usec = 100 * 1000;
         unsigned trial = 1;
@@ -373,7 +375,7 @@ static int acquire_file(CaRemote *rr,
 static int run(int argc, char *argv[]) {
         const char *base_url, *archive_url, *index_url, *wstore_url;
         size_t n_stores = 0, current_store = 0;
-        CURL *curl = NULL;
+        _cleanup_(curl_easy_cleanup) CURL *curl = NULL;
         _cleanup_(ca_remote_unrefp) CaRemote *rr = NULL;
         _cleanup_(realloc_buffer_free) ReallocBuffer chunk_buffer = {};
         _cleanup_free_ char *url_buffer = NULL;
@@ -405,10 +407,8 @@ static int run(int argc, char *argv[]) {
         }
 
         rr = ca_remote_new();
-        if (!rr) {
-                r = log_oom();
-                goto finish;
-        }
+        if (!rr)
+                return log_oom();
 
         r = ca_remote_set_local_feature_flags(rr,
                                               (n_stores > 0 ? CA_PROTOCOL_READABLE_STORE : 0) |
@@ -416,32 +416,28 @@ static int run(int argc, char *argv[]) {
                                               (archive_url ? CA_PROTOCOL_READABLE_ARCHIVE : 0));
         if (r < 0) {
                 log_error("Failed to set feature flags: %m");
-                goto finish;
+                return r; 
         }
 
         r = ca_remote_set_io_fds(rr, STDIN_FILENO, STDOUT_FILENO);
         if (r < 0) {
                 log_error("Failed to set I/O file descriptors: %m");
-                goto finish;
+                return r; 
         }
 
         curl = curl_easy_init();
-        if (!curl) {
-                r = log_oom();
-                goto finish;
-        }
+        if (!curl)
+		return log_oom();
 
         if (curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK) {
                 log_error("Failed to turn on location following.");
-                r = -EIO;
-                goto finish;
+                return -EIO;
         }
 
         if (curl_easy_setopt(curl, CURLOPT_PROTOCOLS, arg_protocol == ARG_PROTOCOL_FTP ? CURLPROTO_FTP :
                                                       arg_protocol == ARG_PROTOCOL_SFTP? CURLPROTO_SFTP: CURLPROTO_HTTP|CURLPROTO_HTTPS) != CURLE_OK) {
                 log_error("Failed to limit protocols to HTTP/HTTPS/FTP/SFTP.");
-                r = -EIO;
-                goto finish;
+                return -EIO;
         }
 
         if (arg_protocol == ARG_PROTOCOL_SFTP) {
@@ -454,45 +450,42 @@ static int run(int argc, char *argv[]) {
         if (arg_rate_limit_bps > 0) {
                 if (curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
                         log_error("Failed to set CURL send speed limit.");
-                        r = -EIO;
-                        goto finish;
+                	return -EIO;
                 }
 
                 if (curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
                         log_error("Failed to set CURL receive speed limit.");
-                        r = -EIO;
-                        goto finish;
+                	return -EIO;
                 }
         }
 
         if (curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4)) {
                 log_error("Failed to set CURL verbosity.");
-                r = -EIO;
-                goto finish;
+                return -EIO;
         }
 
         if (archive_url) {
                 r = acquire_file(rr, curl, archive_url, write_archive);
                 if (r < 0)
-                        goto finish;
+                        return r;
                 if (r == 0)
                         goto flush;
 
                 r = write_archive_eof(rr);
                 if (r < 0)
-                        goto finish;
+                        return r;
         }
 
         if (index_url) {
                 r = acquire_file(rr, curl, index_url, write_index);
                 if (r < 0)
-                        goto finish;
+                        return r;
                 if (r == 0)
                         goto flush;
 
                 r = write_index_eof(rr);
                 if (r < 0)
-                        goto finish;
+                        return r;
         }
 
         for (;;) {
@@ -501,27 +494,24 @@ static int run(int argc, char *argv[]) {
 
                 if (quit) {
                         log_info("Got exit signal, quitting.");
-                        r = 0;
-                        goto finish;
+                        return 0;
                 }
 
                 if (n_stores == 0)  /* No stores? Then we did all we could do */
                         break;
 
                 r = process_remote(rr, PROCESS_UNTIL_HAVE_REQUEST);
-                if (r == -EPIPE) {
-                        r = 0;
-                        goto finish;
-                }
+                if (r == -EPIPE)
+                        return 0;
                 if (r < 0)
-                        goto finish;
+                        return r;
 
                 r = ca_remote_next_request(rr, &id);
                 if (r == -ENODATA)
                         continue;
                 if (r < 0) {
                         log_error_errno(r, "Failed to determine next chunk to get: %m");
-                        goto finish;
+                        return r;
                 }
 
                 current_store = current_store % n_stores;
@@ -533,70 +523,58 @@ static int run(int argc, char *argv[]) {
 
                 free(url_buffer);
                 url_buffer = chunk_url(store_url, &id);
-                if (!url_buffer) {
-                        r = log_oom();
-                        goto finish;
-                }
+                if (!url_buffer)
+                        return log_oom();
 
                 if (curl_easy_setopt(curl, CURLOPT_URL, url_buffer) != CURLE_OK) {
                         log_error("Failed to set CURL URL to: %s", url_buffer);
-                        r = -EIO;
-                        goto finish;
+                        return -EIO;
                 }
 
                 if (curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_chunk) != CURLE_OK) {
                         log_error("Failed to set CURL callback function.");
-                        r = -EIO;
-                        goto finish;
+                        return -EIO;
                 }
 
                 if (curl_easy_setopt(curl, CURLOPT_WRITEDATA, &chunk_buffer) != CURLE_OK) {
                         log_error("Failed to set CURL private data.");
-                        r = -EIO;
-                        goto finish;
+                        return -EIO;
                 }
 
                 if (arg_rate_limit_bps > 0) {
                         if (curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
                                 log_error("Failed to set CURL send speed limit.");
-                                r = -EIO;
-                                goto finish;
+                                return -EIO;
                         }
 
                         if (curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
                                 log_error("Failed to set CURL receive speed limit.");
-                                r = -EIO;
-                                goto finish;
+                                return -EIO;
                         }
                 }
 
                 if (curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4)) {
                         log_error("Failed to set CURL verbosity.");
-                        r = -EIO;
-                        goto finish;
+                        return -EIO;
                 }
 
                 log_debug("Acquiring %s...", url_buffer);
 
                 if (robust_curl_easy_perform(curl) != CURLE_OK) {
                         log_error("Failed to acquire %s", url_buffer);
-                        r = -EIO;
-                        goto finish;
+                        return -EIO;
                 }
 
                 if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &protocol_status) != CURLE_OK) {
                         log_error("Failed to query response code");
-                        r = -EIO;
-                        goto finish;
+                        return -EIO;
                 }
 
                 r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_CHUNK);
-                if (r == -EPIPE) {
-                        r = 0;
-                        goto finish;
-                }
+                if (r == -EPIPE)
+                        return 0;
                 if (r < 0)
-                        goto finish;
+                        return r;
 
                 if ((IN_SET(arg_protocol, ARG_PROTOCOL_HTTP, ARG_PROTOCOL_HTTPS) && protocol_status == 200) ||
                     (arg_protocol == ARG_PROTOCOL_FTP && (protocol_status >= 200 && protocol_status <= 299))||
@@ -605,7 +583,7 @@ static int run(int argc, char *argv[]) {
                         r = ca_remote_put_chunk(rr, &id, CA_CHUNK_COMPRESSED, realloc_buffer_data(&chunk_buffer), realloc_buffer_size(&chunk_buffer));
                         if (r < 0) {
                                 log_error_errno(r, "Failed to write chunk: %m");
-                                goto finish;
+                                return r;
                         }
 
                 } else {
@@ -615,29 +593,21 @@ static int run(int argc, char *argv[]) {
                         r = ca_remote_put_missing(rr, &id);
                         if (r < 0) {
                                 log_error_errno(r, "Failed to write missing message: %m");
-                                goto finish;
+                                return r;
                         }
                 }
 
                 realloc_buffer_empty(&chunk_buffer);
 
                 r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
-                if (r == -EPIPE) {
-                        r = 0;
-                        goto finish;
-                }
+                if (r == -EPIPE)
+                        return 0;
                 if (r < 0)
-                        goto finish;
+                        return r;
         }
 
 flush:
-        r = process_remote(rr, PROCESS_UNTIL_FINISHED);
-
-finish:
-        if (curl)
-                curl_easy_cleanup(curl);
-
-        return r;
+        return process_remote(rr, PROCESS_UNTIL_FINISHED);
 }
 
 static void help(void) {
