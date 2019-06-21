@@ -324,6 +324,7 @@ static void ca_decoder_node_free_xattrs(CaDecoderNode *n) {
 }
 
 static void ca_decoder_node_free_acl_entries(CaDecoderACLEntry **e) {
+        assert(e);
 
         while (*e) {
                 CaDecoderACLEntry *next;
@@ -821,7 +822,6 @@ static bool validate_minor(uint64_t m) {
 }
 
 static bool validate_nsec(CaDecoder *d, uint64_t t) {
-
         assert(d);
 
         if (t == UINT64_MAX)
@@ -1134,6 +1134,9 @@ static const CaFormatSELinux *validate_format_selinux(CaDecoder *d, const void *
         const CaFormatSELinux *l = p;
         size_t n;
 
+        assert(d);
+        assert(p);
+
         if (read_le64(&l->header.size) < offsetof(CaFormatSELinux, label) + 2)
                 return NULL;
         if (read_le64(&l->header.type) != CA_FORMAT_SELINUX)
@@ -1208,6 +1211,9 @@ static const CaFormatSymlink* validate_format_symlink(CaDecoder *d, const void *
 static const CaFormatDevice *validate_format_device(CaDecoder *d, const void *p) {
         const CaFormatDevice *dd = p;
 
+        assert(d);
+        assert(p);
+
         if (read_le64(&dd->header.size) != sizeof(CaFormatDevice))
                 return NULL;
         if (read_le64(&dd->header.type) != CA_FORMAT_DEVICE)
@@ -1228,6 +1234,9 @@ static const CaFormatDevice *validate_format_device(CaDecoder *d, const void *p)
 static const CaFormatPayload* validate_format_payload(CaDecoder *d, const void *q) {
         const CaFormatPayload *p = q;
 
+        assert(d);
+        assert(q);
+
         if (read_le64(&p->header.size) < offsetof(CaFormatPayload, data))
                 return NULL;
         if (read_le64(&p->header.type) != CA_FORMAT_PAYLOAD)
@@ -1238,6 +1247,9 @@ static const CaFormatPayload* validate_format_payload(CaDecoder *d, const void *
 
 static const CaFormatFilename* validate_format_filename(CaDecoder *d, const void *p) {
         const CaFormatFilename *f = p;
+
+        assert(d);
+        assert(p);
 
         if (read_le64(&f->header.size) < offsetof(CaFormatFilename, name) + 1)
                 return NULL;
@@ -1251,14 +1263,18 @@ static const CaFormatFilename* validate_format_filename(CaDecoder *d, const void
 }
 
 static inline const CaFormatGoodbyeTail* CA_FORMAT_GOODBYE_TO_TAIL(const CaFormatGoodbye *g) {
+        assert(g);
+
         return (const CaFormatGoodbyeTail*) ((uint8_t*) g + read_le64(&g->header.size) - sizeof(CaFormatGoodbyeTail));
 }
 
 static const CaFormatGoodbye *validate_format_goodbye(CaDecoder *d, const void *p) {
-const CaFormatGoodbye *g = p;
+        const CaFormatGoodbye *g = p;
         const CaFormatGoodbyeTail *t;
         uint64_t l;
 
+        assert(d);
+        assert(p);
         assert(sizeof(CaFormatGoodbyeTail) == sizeof(CaFormatGoodbyeItem));
 
         if (read_le64(&g->header.size) < offsetof(CaFormatGoodbye, items) + sizeof(CaFormatGoodbyeTail))
@@ -1362,6 +1378,7 @@ static const CaFormatGoodbyeItem* format_goodbye_search_inner(
         uint64_t p;
 
         assert(table);
+        assert(idx);
 
         if (i >= n)
                 return NULL;
@@ -1433,6 +1450,7 @@ static int path_get_component(const char **p, char **ret) {
 
         assert(p);
         assert(*p);
+        assert(ret);
 
         /* Skip initial slashes */
         q = *p + strspn(*p, "/");
@@ -1675,6 +1693,8 @@ static int ca_decoder_do_seek(CaDecoder *d, CaDecoderNode *n) {
 
 static int ca_decoder_write_digest(CaDecoder *d, CaDigest **digest, const void *p, size_t l) {
         int r;
+
+        assert(p);
 
         if (!d)
                 return -EINVAL;
@@ -2461,6 +2481,7 @@ static int ca_decoder_parse_filename(CaDecoder *d, CaDecoderNode *n) {
         int r;
 
         assert(d);
+        assert(n);
         assert(IN_SET(d->state,
                       CA_DECODER_IN_DIRECTORY,
                       CA_DECODER_SEEKING_TO_FILENAME,
@@ -2750,6 +2771,7 @@ static int ca_decoder_node_get_fd(CaDecoder *d, CaDecoderNode *n) {
 static int mkdir_or_mksubvol(CaDecoder *d, int dir_fd, CaDecoderNode *n, const char *name) {
         int r;
 
+        assert(d);
         assert(dir_fd >= 0);
         assert(n);
         assert(name);
@@ -2947,6 +2969,7 @@ static uid_t ca_decoder_shift_uid(CaDecoder *d, uid_t uid) {
 }
 
 static gid_t ca_decoder_shift_gid(CaDecoder *d, gid_t gid) {
+        assert(d); /* TODO */
         return (gid_t) ca_decoder_shift_uid(d, (uid_t) gid);
 }
 
@@ -3328,6 +3351,9 @@ static int ca_decoder_node_reflink(CaDecoder *d, CaDecoderNode *n) {
 static int comparison_fn_strcmpp(const void *x, const void *y) {
         const char* const *a = x, * const* b = y;
 
+        assert(a);
+        assert(b);
+
         return strcmp(*a, *b);
 }
 
@@ -3335,6 +3361,10 @@ static inline void* safe_bsearch(
                 const void *key, const void *base,
                 size_t nmemb, size_t size,
                 comparison_fn_t fn) {
+
+        assert(key);
+        assert(base);
+        assert(fn);
 
         /* A wrapper that makes sure we can bsearch and don't have to pass a non-NULL base for nmemb == 0 */
 
@@ -3512,6 +3542,7 @@ static int ca_decoder_finalize_child(CaDecoder *d, CaDecoderNode *n, CaDecoderNo
         int r, dir_fd;
 
         assert(d);
+        /* assert(n); can be NULL */
         assert(child);
 
         /* If the child got replaced by a hardlink to a seed file we don't need to finalize it. */
@@ -5056,7 +5087,6 @@ static int ca_decoder_seek_path_internal(
                 const char *path,
                 bool next_sibling,
                 uint64_t offset) {
-
         char *path_copy = NULL;
         const char *p;
         size_t new_idx;
@@ -5141,7 +5171,6 @@ int ca_decoder_seek_path(CaDecoder *d, const char *path) {
 }
 
 int ca_decoder_seek_path_offset(CaDecoder *d, const char *path, uint64_t offset) {
-
         if (offset == UINT64_MAX)
                 return -EINVAL;
 
@@ -5163,7 +5192,6 @@ int ca_decoder_seek_next_sibling(CaDecoder *d) {
 }
 
 int ca_decoder_get_seek_offset(CaDecoder *d, uint64_t *ret) {
-
         /* Called by the consumer whenever we issued a CA_DECODER_SEEK event, and informs the caller to which absolute
          * byte index to seek to. */
 
@@ -5209,7 +5237,6 @@ int ca_decoder_get_skip_size(CaDecoder *d, uint64_t *ret) {
 }
 
 int ca_decoder_set_archive_size(CaDecoder *d, uint64_t size) {
-
         if (!d)
                 return -EINVAL;
 
@@ -5221,7 +5248,6 @@ int ca_decoder_set_archive_size(CaDecoder *d, uint64_t size) {
 }
 
 int ca_decoder_set_punch_holes(CaDecoder *d, bool enabled) {
-
         if (!d)
                 return -EINVAL;
 
@@ -5230,7 +5256,6 @@ int ca_decoder_set_punch_holes(CaDecoder *d, bool enabled) {
 }
 
 int ca_decoder_set_reflink(CaDecoder *d, bool enabled) {
-
         if (!d)
                 return -EINVAL;
 
@@ -5239,7 +5264,6 @@ int ca_decoder_set_reflink(CaDecoder *d, bool enabled) {
 }
 
 int ca_decoder_set_hardlink(CaDecoder *d, bool enabled) {
-
         if (!d)
                 return -EINVAL;
 
@@ -5248,7 +5272,6 @@ int ca_decoder_set_hardlink(CaDecoder *d, bool enabled) {
 }
 
 int ca_decoder_set_delete(CaDecoder *d, bool enabled) {
-
         if (!d)
                 return -EINVAL;
 
@@ -5257,7 +5280,6 @@ int ca_decoder_set_delete(CaDecoder *d, bool enabled) {
 }
 
 int ca_decoder_set_payload(CaDecoder *d, bool enabled) {
-
         if (!d)
                 return -EINVAL;
 
@@ -5266,7 +5288,6 @@ int ca_decoder_set_payload(CaDecoder *d, bool enabled) {
 }
 
 int ca_decoder_set_undo_immutable(CaDecoder *d, bool enabled) {
-
         if (!d)
                 return -EINVAL;
 

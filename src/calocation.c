@@ -34,7 +34,6 @@ int ca_location_new(
                 uint64_t offset,
                 uint64_t size,
                 CaLocation **ret) {
-
         CaLocation *l;
 
         if (!CA_LOCATION_DESIGNATOR_VALID(designator))
@@ -48,6 +47,8 @@ int ca_location_new(
         if (designator == CA_LOCATION_VOID && path)
                 return -EINVAL;
         if (size != UINT64_MAX && offset + size < offset)
+                return -EINVAL;
+        if (!ret)
                 return -EINVAL;
 
         l = ca_location_alloc();
@@ -410,6 +411,8 @@ int ca_location_patch_size(CaLocation **l, uint64_t size) {
 
 int ca_location_patch_root(CaLocation **l, CaFileRoot *root) {
         int r;
+
+        assert(root); /* TODO: check */
 
         if (!l)
                 return -EINVAL;

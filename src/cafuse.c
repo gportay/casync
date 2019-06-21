@@ -18,7 +18,6 @@ static CaSync *instance = NULL;
 static struct fuse *fuse = NULL;
 
 static void fuse_exit_signal_handler(int signo) {
-
         /* Call our own generic handler */
         exit_signal_handler(signo);
 
@@ -132,7 +131,6 @@ static void *casync_init(struct fuse_conn_info *conn) {
 static int casync_getattr(
                 const char *path,
                 struct stat *stbuf) {
-
         int r;
 
         assert(path);
@@ -158,7 +156,6 @@ static int casync_readlink(
                 const char *path,
                 char *ret,
                 size_t size) {
-
         const char *target;
         int r;
 
@@ -189,9 +186,13 @@ static int casync_readdir(
                 fuse_fill_dir_t filler,
                 off_t offset,
                 struct fuse_file_info *info) {
-
         bool seen_toplevel = false;
         int r;
+
+        assert(path);
+        assert(buf);
+        assert(filler);
+        assert(info);
 
         /* fprintf(stderr, "Got request for readdir(%s).\n", path); */
 
@@ -281,6 +282,7 @@ static int casync_readdir(
 
         return 0;
 }
+
 static int casync_open(const char *path, struct fuse_file_info *fi) {
         int r;
 
@@ -302,6 +304,7 @@ static int casync_open(const char *path, struct fuse_file_info *fi) {
 
         return 0;
 }
+
 static int casync_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
         int r, sum = 0;
 
@@ -392,6 +395,9 @@ static int casync_statfs(const char *path, struct statvfs *sfs) {
         uint64_t size = UINT64_MAX;
         int r;
 
+        assert(path);
+        assert(sfs);
+
         /* fprintf(stderr, "Got request for stats().\n"); */
 
         for (;;) {
@@ -454,7 +460,6 @@ static int casync_ioctl(
                 struct fuse_file_info *fi,
                 unsigned int flags,
                 void *data) {
-
         int r;
 
         if (flags & FUSE_IOCTL_COMPAT)
@@ -600,6 +605,8 @@ static int feature_flags_warning(CaSync *s) {
         char *t;
         int r;
 
+        assert(s);
+
         for (;;) {
                 int step;
 
@@ -664,7 +671,6 @@ int ca_fuse_run(CaSync *s, const char *what, const char *where, bool do_mkdir) {
                 NULL
         };
         const char *opts;
-
         struct fuse_args args = {
                 .argc = 2,
                 .argv = (char **) arguments,

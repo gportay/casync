@@ -241,7 +241,6 @@ static int ca_index_open_fd(CaIndex *i) {
 }
 
 static int ca_index_write_head(CaIndex *i) {
-
         struct {
                 CaFormatIndex index;
                 CaFormatHeader table;
