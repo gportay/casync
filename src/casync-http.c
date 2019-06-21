@@ -402,8 +402,7 @@ finish:
         return r;
 }
 
-static int acquire_chunk(CaRemote *rr,
-                         const char *url,
+static int acquire_chunk(const char *url,
                          size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata),
                          void *userdata) {
 
@@ -620,7 +619,7 @@ static int run(int argc, char *argv[]) {
                         goto finish;
                 }
 
-                r = acquire_chunk(rr, url_buffer, write_chunk, &chunk_buffer);
+                r = acquire_chunk(url_buffer, write_chunk, &chunk_buffer);
                 if (r < 0)
                         goto finish;
                 if (r == 0) {
