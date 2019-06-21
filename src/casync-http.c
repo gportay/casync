@@ -10,6 +10,7 @@
 #include "cautil.h"
 #include "realloc-buffer.h"
 #include "util.h"
+#include "list.h"
 
 static volatile sig_atomic_t quit = false;
 
@@ -33,6 +34,19 @@ typedef enum ProcessUntil {
         PROCESS_UNTIL_HAVE_REQUEST,
         PROCESS_UNTIL_FINISHED,
 } ProcessUntil;
+
+typedef struct CaChunk {
+        CaChunkID id;
+        char *url;
+        CURL *curl;
+        ReallocBuffer buffer;
+        LIST_FIELDS(struct CaChunk, list);
+} CaChunk;
+
+static CaChunk *ca_chunk_new(void);
+static CaChunk *ca_chunk_free(CaChunk *c);
+static int ca_chunk_acquire_file(CaChunk *c, CURLM *curlm, const char *url, CaChunkID *id);
+static int ca_chunk_acquire_file_process(CaChunk *c, CURLM *curlm); /* TODO: find a better name */
 
 static CURLcode robust_curl_easy_perform(CURL *curl) {
         uint64_t sleep_base_usec = 100 * 1000;
@@ -382,6 +396,15 @@ static int acquire_file(const char *url,
 
         log_debug("Acquiring %s...", url);
 
+        if (curlm) {
+                if (curl_multi_add_handle(curlm, curl) != CURLM_OK) {
+                        log_error("Failed to acquire %s", url);
+                        return -EIO;
+                }
+
+                return 1;
+        }
+
         if (robust_curl_easy_perform(curl) != CURLE_OK) {
                 log_error("Failed to acquire %s", url);
                 r = -EIO;
@@ -418,9 +441,191 @@ finish:
         return r;
 }
 
+static CaChunk *ca_chunk_new(void) {
+        CaChunk *c;
+
+        c = new0(CaChunk, 1);
+        if (!c)
+                return NULL;
+
+        LIST_INIT(list, c);
+
+        return c;
+}
+
+static CaChunk *ca_chunk_free(CaChunk *c) {
+        if (!c)
+                return NULL;
+
+        if (c->curl)
+                curl_easy_cleanup(c->curl);
+
+        realloc_buffer_free(&c->buffer);
+
+        free(c->url);
+
+        return mfree(c);
+}
+
+static int ca_chunk_acquire_file(CaChunk *c, CURLM *curlm, const char *url, CaChunkID *id) {
+        CURL *curl;
+        int r = 0;
+
+        if (!c)
+                return -EINVAL;
+        if (!url)
+                return -EINVAL;
+        if (c->curl)
+                return -EBUSY;
+
+        curl = curl_easy_init();
+        if (!curl)
+                return log_oom();
+
+        if (curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L) != CURLE_OK) {
+                log_error("Failed to turn on location following.");
+                r = -EIO;
+                goto finish;
+        }
+
+        if (curl_easy_setopt(curl, CURLOPT_PROTOCOLS, arg_protocol == ARG_PROTOCOL_FTP ? CURLPROTO_FTP :
+                                                      arg_protocol == ARG_PROTOCOL_SFTP? CURLPROTO_SFTP: CURLPROTO_HTTP|CURLPROTO_HTTPS) != CURLE_OK) {
+                log_error("Failed to limit protocols to HTTP/HTTPS/FTP/SFTP.");
+                r = -EIO;
+                goto finish;
+        }
+
+        if (arg_protocol == ARG_PROTOCOL_SFTP) {
+                /* activate the ssh agent. For this to work you need
+                   to have ssh-agent running (type set | grep SSH_AGENT to check) */
+                if (curl_easy_setopt(curl, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_AGENT) != CURLE_OK)
+                        log_error("Failed to turn on ssh agent support, ignoring.");
+        }
+
+        if (curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4)) {
+                log_error("Failed to set CURL verbosity.");
+                r = -EIO;
+                goto finish;
+        }
+
+        if (arg_rate_limit_bps > 0) {
+                if (curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
+                        log_error("Failed to set CURL send speed limit.");
+                        r = -EIO;
+                        goto finish;
+                }
+
+                if (curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
+                        log_error("Failed to set CURL receive speed limit.");
+                        r = -EIO;
+                        goto finish;
+                }
+        }
+
+        if (curl_easy_setopt(curl, CURLOPT_URL, url) != CURLE_OK) {
+                log_error("Failed to set CURL URL to: %s", url);
+                r = -EIO;
+                goto finish;
+        }
+
+        if (curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_chunk) != CURLE_OK) {
+                log_error("Failed to set CURL callback function.");
+                r = -EIO;
+                goto finish;
+        }
+
+        if (curl_easy_setopt(curl, CURLOPT_WRITEDATA, &c->buffer) != CURLE_OK) {
+                log_error("Failed to set CURL private data.");
+                r = -EIO;
+                goto finish;
+        }
+
+        memcpy(&c->id, id, sizeof(*id)); /* TODO: remove memcpy */
+        log_debug("Acquiring %s...", url);
+
+        if (curlm) {
+                c->curl = curl;
+                c->url = strdup(url);
+                if (!c->url) {
+                        r = log_oom();
+                        goto finish;
+                }
+
+                if (curl_multi_add_handle(curlm, curl) != CURLM_OK) {
+                        log_error("Failed to acquire %s", url);
+                        r = -EIO;
+                        goto finish;
+                }
+
+                return 1;
+        }
+
+        if (robust_curl_easy_perform(curl) != CURLE_OK) {
+                log_error("Failed to acquire %s", url);
+                r = -EIO;
+                goto finish;
+        }
+
+        r = ca_chunk_acquire_file_process(c, curlm);
+
+finish:
+        curl_easy_cleanup(curl);
+
+        return r;
+}
+
+static int ca_chunk_acquire_file_process(CaChunk *c, CURLM *curlm) {
+        long protocol_status;
+        CURL *curl;
+        int r = 0;
+
+        if (!c)
+                return -EINVAL;
+
+        assert(c->curl);
+
+        curl = c->curl;
+
+        if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &protocol_status) != CURLE_OK) {
+                log_error("Failed to query response code");
+                r = -EIO;
+                goto finish;
+        }
+
+        if (IN_SET(arg_protocol, ARG_PROTOCOL_HTTP, ARG_PROTOCOL_HTTPS) && protocol_status != 200) {
+                if (arg_verbose)
+                        log_error("HTTP server failure %li while requesting %s.", protocol_status, c->url);
+
+                r = 0;
+        } else if (arg_protocol == ARG_PROTOCOL_FTP && (protocol_status < 200 || protocol_status > 299)) {
+                if (arg_verbose)
+                        log_error("FTP server failure %li while requesting %s.", protocol_status, c->url);
+
+                r = 0;
+        } else if (arg_protocol == ARG_PROTOCOL_SFTP && (protocol_status != 0)) {
+                if (arg_verbose)
+                        log_error("SFTP server failure %li while requesting %s.", protocol_status, c->url);
+
+                r = 0;
+        } else
+                r = 1;
+
+finish:
+        if (curlm) {
+                curl_multi_remove_handle(curlm, curl);
+        }
+
+        curl_easy_cleanup(curl);
+        c->curl = NULL;
+
+        return r;
+}
+
 static int run(int argc, char *argv[]) {
         const char *base_url, *archive_url, *index_url, *wstore_url;
         size_t n_stores = 0, current_store = 0;
+        CaChunk *c;
+        LIST_HEAD(CaChunk, chunks);
         _cleanup_(ca_remote_unrefp) CaRemote *rr = NULL;
         _cleanup_(realloc_buffer_free) ReallocBuffer chunk_buffer = {};
         _cleanup_free_ char *url_buffer = NULL;
@@ -498,6 +703,8 @@ static int run(int argc, char *argv[]) {
                 if (r < 0)
                         goto finish;
         }
+
+        LIST_HEAD_INIT(chunks);
 
         for (;;) {
                 const char *store_url;
@@ -586,6 +793,10 @@ flush:
         r = process_remote(rr, PROCESS_UNTIL_FINISHED);
 
 finish:
+        LIST_FOREACH(list, c, chunks) {
+                ca_chunk_free(c);
+        }
+
         return r;
 }
 
