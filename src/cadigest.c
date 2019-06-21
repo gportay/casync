@@ -143,7 +143,6 @@ const char *ca_digest_get_name(CaDigest *d) {
 }
 
 size_t ca_digest_type_size(CaDigestType t) {
-
         switch (t) {
 
         case CA_DIGEST_SHA256:

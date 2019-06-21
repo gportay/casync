@@ -10,6 +10,7 @@ static CaMatch* ca_match_alloc(CaMatchType type, const char *name) {
         CaMatch *ret;
         size_t l;
 
+        assert(name); /* DONOTCOMMMIT: Just check! */
         assert(type >= 0);
         assert(type < _CA_MATCH_TYPE_MAX);
 
@@ -131,6 +132,7 @@ int ca_match_new_from_file(int dir_fd, const char *filename, CaMatch **ret) {
         _cleanup_(safe_fclosep) FILE *f = NULL;
         int fd, r;
 
+        assert(filename); /* TODO: check */
         assert(ret);
 
         fd = openat(dir_fd, filename, O_CLOEXEC|O_RDONLY|O_NONBLOCK|O_NOCTTY);
@@ -181,6 +183,7 @@ int ca_match_new_from_strings(char **list, CaMatch **ret) {
         char **i;
         int r;
 
+        assert(list);
         assert(ret);
 
         STRV_FOREACH(i, list) {
@@ -328,6 +331,8 @@ static int compare_match(const void *a, const void *b) {
         size_t i;
         int k;
 
+        assert(a); /* TODO: check before affectation *a, *b */
+        assert(b);
         if (x == y)
                 return 0;
 
@@ -382,6 +387,7 @@ int ca_match_normalize(CaMatch **match) {
          * same ruleset as before. */
 
         assert(match);
+        assert(*match);
 
         if (ca_match_children(*match) == 0)
                 return 0;
@@ -459,6 +465,9 @@ int ca_match_test(CaMatch *match, const char *name, bool is_directory, CaMatch *
                 has_unanchored = false, has_2nd_level = false;
         size_t i;
         int r;
+
+        assert(name);
+        assert(match);
 
         /* Checks wether the match object knows a match for the specified 'name'. If it has a positive match returns
          * 1, if it has a negative one, returns 0. If 'ret_subtree' is non-NULL creates a new object for all children
@@ -580,5 +589,8 @@ void ca_match_dump(FILE *f, CaMatch *match, const char *prefix) {
 }
 
 bool ca_match_equal(CaMatch *a, CaMatch *b) {
+        assert(a);
+        assert(b);
+
         return compare_match(&a, &b) == 0;
 }
