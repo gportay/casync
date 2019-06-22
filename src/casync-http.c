@@ -319,7 +319,8 @@ static char *chunk_url(const char *store_url, const CaChunkID *id) {
         return buffer;
 }
 
-static int acquire_file(const char *url,
+static int acquire_file(CURLM *curlm,
+                        const char *url,
                         size_t (*callback)(const void *p, size_t size, size_t nmemb, void *userdata),
                         void *userdata) {
 
@@ -399,7 +400,8 @@ static int acquire_file(const char *url,
         if (curlm) {
                 if (curl_multi_add_handle(curlm, curl) != CURLM_OK) {
                         log_error("Failed to acquire %s", url);
-                        return -EIO;
+                        r = -EIO;
+                        goto finish;
                 }
 
                 return 1;
@@ -624,6 +626,7 @@ finish:
 static int run(int argc, char *argv[]) {
         const char *base_url, *archive_url, *index_url, *wstore_url;
         size_t n_stores = 0, current_store = 0;
+        CURLM *curlm = NULL;
         CaChunk *c;
         LIST_HEAD(CaChunk, chunks);
         _cleanup_(ca_remote_unrefp) CaRemote *rr = NULL;
@@ -677,7 +680,7 @@ static int run(int argc, char *argv[]) {
         }
 
         if (archive_url) {
-                r = acquire_file(archive_url, write_archive, rr);
+                r = acquire_file(curlm, archive_url, write_archive, rr);
                 if (r < 0)
                         goto finish;
                 if (r == 0) {
@@ -691,7 +694,7 @@ static int run(int argc, char *argv[]) {
         }
 
         if (index_url) {
-                r = acquire_file(index_url, write_index, rr);
+                r = acquire_file(curlm, index_url, write_index, rr);
                 if (r < 0)
                         goto finish;
                 if (r == 0) {
@@ -702,6 +705,12 @@ static int run(int argc, char *argv[]) {
                 r = write_index_eof(rr);
                 if (r < 0)
                         goto finish;
+        }
+
+        curlm = curl_multi_init();
+        if (!curlm) {
+                r = log_oom();
+                goto finish;
         }
 
         LIST_HEAD_INIT(chunks);
@@ -717,7 +726,7 @@ static int run(int argc, char *argv[]) {
                 }
 
                 if (n_stores == 0)  /* No stores? Then we did all we could do */
-                        break;
+                        goto flush;
 
                 r = process_remote(rr, PROCESS_UNTIL_HAVE_REQUEST);
                 if (r == -EPIPE) {
@@ -726,6 +735,8 @@ static int run(int argc, char *argv[]) {
                 }
                 if (r < 0)
                         goto finish;
+                if (r == 0)
+                        break;
 
                 r = ca_remote_next_request(rr, &id);
                 if (r == -ENODATA)
@@ -749,7 +760,22 @@ static int run(int argc, char *argv[]) {
                         goto finish;
                 }
 
-                r = acquire_file(url_buffer, write_chunk, &chunk_buffer);
+                if (curlm) {
+                        c = ca_chunk_new();
+                        if (!c) {
+                                r = log_oom();
+                                goto finish;
+                        }
+
+                        r = ca_chunk_acquire_file(c, curlm, url_buffer, &id);
+                        if (r < 0)
+                                goto finish;
+
+                        LIST_APPEND(list, chunks, c);
+                        continue;
+                }
+
+                r = acquire_file(curlm, url_buffer, write_chunk, &chunk_buffer);
                 if (r < 0)
                         goto finish;
                 if (r == 0) {
@@ -789,10 +815,152 @@ static int run(int argc, char *argv[]) {
                         goto finish;
         }
 
+        if (!curlm)
+                goto flush;
+
+        LIST_FOREACH(list, c, chunks) {
+                fprintf(stderr, "c->url: %s\n", c->url);
+        }
+
+        int still_running = 0; /* keep number of running handles */
+        CURLMsg *msg; /* for picking up messages with the transfer status */
+        int msgs_left; /* how many messages are left */
+
+        /* we start some action by calling perform right away */
+        curl_multi_perform(curlm, &still_running);
+
+        while (still_running) {
+                struct timeval timeout;
+                int rc; /* select() return code */
+                CURLMcode mc; /* curl_multi_fdset() return code */
+
+                fd_set fdread;
+                fd_set fdwrite;
+                fd_set fdexcep;
+                int maxfd = -1;
+
+                long curl_timeo = -1;
+
+                FD_ZERO(&fdread);
+                FD_ZERO(&fdwrite);
+                FD_ZERO(&fdexcep);
+
+                /* set a suitable timeout to play around with */
+                timeout.tv_sec = 1;
+                timeout.tv_usec = 0;
+
+                curl_multi_timeout(curlm, &curl_timeo);
+                if (curl_timeo >= 0) {
+                        timeout.tv_sec = curl_timeo / 1000;
+                        if (timeout.tv_sec > 1)
+                                timeout.tv_sec = 1;
+                        else
+                                timeout.tv_usec = (curl_timeo % 1000) * 1000;
+                }
+
+                /* get file descriptors from the transfers */
+                mc = curl_multi_fdset(curlm, &fdread, &fdwrite, &fdexcep, &maxfd);
+
+                if (mc != CURLM_OK) {
+                        fprintf(stderr, "curl_multi_fdset() failed, code %d.\n", mc);
+                        break;
+                }
+
+                /* On success the value of maxfd is guaranteed to be >= -1. We call
+                 * select(maxfd + 1, ...); specially in case of (maxfd == -1) there are
+                 * no fds ready yet so we call select(0, ...) --or Sleep() on Windows--
+                 * to sleep 100ms, which is the minimum suggested value in the
+                 * curl_multi_fdset() doc. */
+
+                if (maxfd == -1) {
+                        /* Portable sleep for platforms other than Windows. */
+                        struct timeval wait = { 0, 100 * 1000 }; /* 100ms */
+                        rc = select(0, NULL, NULL, NULL, &wait);
+                } else {
+                        /* Note that on some platforms 'timeout' may be modified by select().
+                         * If you need access to the original value save a copy beforehand. */
+                        rc = select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
+                }
+
+                switch (rc) {
+                        case -1:
+                                /* select error */
+                                break;
+                        case 0: /* timeout */
+                        default: /* action */
+                                curl_multi_perform(curlm, &still_running);
+                                break;
+                }
+        }
+
+        /* See how the transfers went */
+        while ((msg = curl_multi_info_read(curlm, &msgs_left))) {
+                if (msg->msg == CURLMSG_DONE) {
+                        LIST_FOREACH(list, c, chunks) {
+                                int found = (msg->easy_handle == c->curl);
+                                if (found)
+                                        break;
+                        }
+
+                        if (!c)
+                                continue;
+
+                        LIST_REMOVE(list, chunks, c);
+
+                        r = ca_chunk_acquire_file_process(c, curlm);
+                        if (r < 0)
+                                goto finish;
+                        if (r == 0) {
+                                r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_CHUNK);
+                                if (r == -EPIPE) {
+                                        r = 0;
+                                        goto finish;
+                                }
+
+                                r = ca_remote_put_missing(rr, &c->id);
+                                if (r < 0) {
+                                        log_error_errno(r, "Failed to write missing message: %m");
+                                        goto finish;
+                                }
+
+                                r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
+                                if (r == -EPIPE) {
+                                        r = 0;
+                                        goto finish;
+                                }
+                                if (r < 0)
+                                        goto finish;
+                        } else {
+                                r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_CHUNK);
+                                if (r == -EPIPE) {
+                                        r = 0;
+                                        goto finish;
+                                }
+
+                                r = ca_remote_put_chunk(rr, &c->id, CA_CHUNK_COMPRESSED, realloc_buffer_data(&c->buffer), realloc_buffer_size(&c->buffer));
+                                if (r < 0) {
+                                        log_error_errno(r, "Failed to write chunk: %m");
+                                        goto finish;
+                                }
+
+                                r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
+                                if (r == -EPIPE) {
+                                        r = 0;
+                                        goto finish;
+                                }
+                                if (r < 0)
+                                        goto finish;
+                        }
+                }
+        }
+
 flush:
         r = process_remote(rr, PROCESS_UNTIL_FINISHED);
 
 finish:
+        if (curlm)
+                curl_multi_cleanup(curlm);
+
         LIST_FOREACH(list, c, chunks) {
                 ca_chunk_free(c);
         }
