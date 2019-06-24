@@ -955,6 +955,7 @@ fprintf(stderr, "url: %s, done: %i\n", ca_chunk_get_url(c), ++done);
 
                         LIST_REMOVE(list, chunks, c);
 
+                        fprintf(stderr, "url: %s\n", c->url);
                         r = ca_chunk_acquire_file_process(c, curlm);
                         if (r < 0)
                                 goto finish;
@@ -1004,7 +1005,9 @@ fprintf(stderr, "url: %s, done: %i\n", ca_chunk_get_url(c), ++done);
 fprintf(stderr, "Terminated! done: %i\n", done);
 
 flush:
+        fprintf(stderr, "YEAH!\n");
         r = process_remote(rr, PROCESS_UNTIL_FINISHED);
+        fprintf(stderr, "YEAH, YEAH, YEAH!\n");
 
 finish:
         if (curlm)
