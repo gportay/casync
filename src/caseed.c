@@ -614,6 +614,7 @@ int ca_seed_get(CaSeed *s,
 
         step = ca_encoder_seek_location(s->encoder, l);
         l = ca_location_unref(l);
+	fprintf(stderr, "[%i] %s@%i l: %p, step: %i\n", getpid(), __func__, __LINE__, l, step);
         if (step == -ENXIO) /* location doesn't exist anymore? Then the seed has been modified */
                 return -ESTALE;
         if (step < 0)
@@ -626,19 +627,28 @@ int ca_seed_get(CaSeed *s,
         if (ret_origin) {
                 r = ca_seed_get_file_root(s, &root);
                 if (r < 0)
+                {
+                	fprintf(stderr, "[%i] %s@%i r: %i\n", getpid(), __func__, __LINE__, r);
                         return r;
+                }
 
                 r = ca_origin_new(&origin);
                 if (r < 0)
+                {
+                	fprintf(stderr, "[%i] %s@%i r: %i\n", getpid(), __func__, __LINE__, r);
                         return r;
+                }
         }
 
         for (;;) {
                 switch (step) {
 
                 case CA_ENCODER_FINISHED:
+                        {
+                	fprintf(stderr, "[%i] %s@%i r: %i\n", getpid(), __func__, __LINE__, r);
                         /* Premature end? Then the seed has been modified */
                         return -ESTALE;
+                        }
 
                 case CA_ENCODER_DATA:
                 case CA_ENCODER_NEXT_FILE:
@@ -693,7 +703,9 @@ int ca_seed_get(CaSeed *s,
                                         /* fprintf(stderr, "SEED CHUNK CORRUPTED (%" PRIu64 "):\n", size); */
                                         /* hexdump(stderr, p, MIN(1024U, size)); */
 
+                                        fprintf(stderr, "SEED CHUNK CORRUPTED (%" PRIu64 "):\n", size);
                                         r = -ESTALE;
+                                        fprintf(stderr, "[%i] %s@%i r: %i\n", getpid(), __func__, __LINE__, r);
                                         goto finish;
                                 }
 

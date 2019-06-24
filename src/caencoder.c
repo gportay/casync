@@ -3733,6 +3733,7 @@ int ca_encoder_seek_location(CaEncoder *e, CaLocation *location) {
 
         e->node_idx = 0;
 
+	fprintf(stderr, "[%i] %s@%i location->designator: %i/%c\n", getpid(), __func__, __LINE__, location->designator, location->designator);
         switch (location->designator) {
 
         case CA_LOCATION_ENTRY:
@@ -3753,7 +3754,10 @@ int ca_encoder_seek_location(CaEncoder *e, CaLocation *location) {
 
                         parent = ca_encoder_node_parent_of(e, node);
                         if (!parent)
+                        {
+	                        fprintf(stderr, "[%i] %s@%i parent: %p\n", getpid(), __func__, __LINE__, parent);
                                 return -ENXIO;
+                        }
 
                         /* Install the name table included in the location for our parents… */
                         r = ca_encoder_node_install_name_table(e, parent, location->name_table);
@@ -3788,20 +3792,32 @@ int ca_encoder_seek_location(CaEncoder *e, CaLocation *location) {
 
                 r = ca_encoder_seek_path_and_enter(e, location->path);
                 if (r < 0)
+                {
+	                fprintf(stderr, "[%i] %s@%i r: %i\n", getpid(), __func__, __LINE__, r);
                         return log_debug_errno(r, "Failed to seek to path %s and enter: %m", location->path);
+                }
 
                 node = ca_encoder_current_node(e);
                 assert(node);
 
                 if (!S_ISREG(node->stat.st_mode) && !S_ISBLK(node->stat.st_mode))
+                {
+	                fprintf(stderr, "[%i] %s@%i return -EISDIR: %i\n", getpid(), __func__, __LINE__, -EISDIR);
                         return -EISDIR;
+                }
 
                 r = ca_encoder_node_get_payload_size(node, &size);
                 if (r < 0)
+                {
+	                fprintf(stderr, "[%i] %s@%i r: %i\n", getpid(), __func__, __LINE__, r);
                         return r;
+                }
 
                 if (location->offset >= size)
+                {
+	                fprintf(stderr, "[%i] %s@%i location->offset: %lu, size: %lu\n", getpid(), __func__, __LINE__, location->offset, size);
                         return -ENXIO;
+                }
 
                 ca_encoder_enter_state(e, CA_ENCODER_IN_PAYLOAD);
                 e->payload_offset = location->offset;
@@ -3815,11 +3831,17 @@ int ca_encoder_seek_location(CaEncoder *e, CaLocation *location) {
 
                         parent = ca_encoder_node_parent_of(e, node);
                         if (!parent)
+                        {
+	                        fprintf(stderr, "[%i] %s@%i parent: %p\n", getpid(), __func__, __LINE__, parent);
                                 return -ENXIO;
+                        }
 
                         r = ca_encoder_node_install_name_table(e, parent, location->name_table);
                         if (r < 0)
+                        {
+	                        fprintf(stderr, "[%i] %s@%i r: %i\n", getpid(), __func__, __LINE__, r);
                                 return r;
+                        }
                 }
 
                 realloc_buffer_empty(&e->buffer);
@@ -3832,6 +3854,7 @@ int ca_encoder_seek_location(CaEncoder *e, CaLocation *location) {
                         ca_digest_reset(e->payload_digest);
 
                 e->hardlink_digest_invalid = true;
+	        fprintf(stderr, "[%i] %s@%i return CA_LOCATION_PAYLOAD: %i\n", getpid(), __func__, __LINE__, CA_ENCODER_PAYLOAD);
                 return CA_ENCODER_PAYLOAD;
         }
 

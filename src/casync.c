@@ -3262,7 +3262,9 @@ int ca_sync_get_local(
                 const void *p;
                 size_t l;
 
+		fprintf(stderr, "[%i] %s@%i i: %li\n", getpid(), __func__, __LINE__, i);
                 r = ca_seed_get(s->seeds[i], chunk_id, &p, &l, ret_origin ? &origin : NULL);
+		fprintf(stderr, "[%i] %s@%i i: %li, r: %i\n", getpid(), __func__, __LINE__, i, r);
                 if (r == -ESTALE) {
                         log_debug("Chunk cache is not up-to-date, ignoring.");
                         continue;
