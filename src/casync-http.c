@@ -18,6 +18,7 @@ static volatile sig_atomic_t quit = false;
 static int arg_log_level = -1;
 static bool arg_verbose = false;
 static curl_off_t arg_rate_limit_bps = 0;
+static long arg_max_host_connections = 1;
 
 static enum {
         ARG_PROTOCOL_HTTP,
@@ -758,6 +759,9 @@ static CaProcess *ca_process_new(CaRemote *rr) {
         if (curl_multi_setopt(curlm, CURLMOPT_PIPELINING, (long)CURLPIPE_HTTP1|CURLPIPE_MULTIPLEX) != CURLM_OK)
                 log_error("Failed to turn on pipelining or multiplexing, ignoring.");
 
+        if (curl_multi_setopt(curlm, CURLMOPT_MAX_HOST_CONNECTIONS, arg_max_host_connections) != CURLM_OK)
+                log_error("Failed to set max host connections.");
+
         p->curlm = curlm;
         p->remote = rr;
         return p;
@@ -944,13 +948,15 @@ static int parse_argv(int argc, char *argv[]) {
 
         enum {
                 ARG_RATE_LIMIT_BPS = 0x100,
+                ARG_MAX_HOST_CONNECTIONS,
         };
 
         static const struct option options[] = {
-                { "help",           no_argument,       NULL, 'h'                },
-                { "log-level",      required_argument, NULL, 'l'                },
-                { "verbose",        no_argument,       NULL, 'v'                },
-                { "rate-limit-bps", required_argument, NULL, ARG_RATE_LIMIT_BPS },
+                { "help",                 no_argument,       NULL, 'h'                      },
+                { "log-level",            required_argument, NULL, 'l'                      },
+                { "verbose",              no_argument,       NULL, 'v'                      },
+                { "rate-limit-bps",       required_argument, NULL, ARG_RATE_LIMIT_BPS       },
+                { "max-host-connections", required_argument, NULL, ARG_MAX_HOST_CONNECTIONS },
                 {}
         };
 
@@ -1003,6 +1009,10 @@ static int parse_argv(int argc, char *argv[]) {
                         if (arg_rate_limit_bps == 0 || arg_rate_limit_bps > UINT32_MAX)
                                 return log_error_errno(EINVAL, "Rate limit size cannot be zero or is out of range.");
 
+                        break;
+
+                case ARG_MAX_HOST_CONNECTIONS:
+                        arg_max_host_connections = strtoll(optarg, NULL, 10);
                         break;
 
                 case '?':
