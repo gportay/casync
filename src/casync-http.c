@@ -372,7 +372,7 @@ static int acquire_file(CaRemote *rr,
         }
 
         if (!protocol_status_ok(arg_protocol, protocol_status)) {
-                char *m;
+                _cleanup_free_ char *m = NULL;
                 int abort_code;
 
                 if (arg_verbose)
@@ -389,7 +389,6 @@ static int acquire_file(CaRemote *rr,
                         abort_code = EBADR;
 
                 (void) ca_remote_abort(rr, abort_code, m);
-                free(m);
                 return 0;
         }
 
