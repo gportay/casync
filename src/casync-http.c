@@ -349,6 +349,13 @@ static int acquire_file(CURLM *curlm,
                 goto finish;
         }
 
+        if (IN_SET(arg_protocol, ARG_PROTOCOL_HTTP, ARG_PROTOCOL_HTTPS)) {
+                if (curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0) != CURLE_OK)
+                        log_error("Failed to set HTTP version to 2.0, ignoring.");
+                if (curl_easy_setopt(curl, CURLOPT_PIPEWAIT, 1L) != CURLE_OK)
+                        log_error("Failed to turn on pipelining or multiplexing, ignoring.");
+        }
+
         if (arg_protocol == ARG_PROTOCOL_SFTP) {
                 /* activate the ssh agent. For this to work you need
                    to have ssh-agent running (type set | grep SSH_AGENT to check) */
@@ -716,6 +723,14 @@ static int run(int argc, char *argv[]) {
                 r = log_oom();
                 goto finish;
         }
+
+        /* libcurl:
+	 * CURLMOPT_PIPELINING - enable HTTP pipelining and multiplexing
+	 * Added in 7.16.0. Multiplex support bit added in 7.43.0. HTTP/1 Pipelining support was disabled in 7.62.0. 
+	 * Since 7.62.0, CURLPIPE_MULTIPLEX is enabled by default. Before that, default was CURLPIPE_NOTHING.
+	 */
+        if (curl_multi_setopt(curlm, CURLMOPT_PIPELINING, (long)CURLPIPE_HTTP1|CURLPIPE_MULTIPLEX) != CURLM_OK)
+                log_error("Failed to turn on pipelining or multiplexing, ignoring.");
 
         LIST_HEAD_INIT(chunks);
 
