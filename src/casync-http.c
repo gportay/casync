@@ -726,11 +726,15 @@ static int run(int argc, char *argv[]) {
                         goto finish;
         }
 
+#if 1
         curlm = curl_multi_init();
         if (!curlm) {
                 r = log_oom();
                 goto finish;
         }
+#else
+        curlm = NULL;
+#endif
 
         /* libcurl:
 	 * CURLMOPT_PIPELINING - enable HTTP pipelining and multiplexing
@@ -765,8 +769,10 @@ static int run(int argc, char *argv[]) {
                 }
                 if (r < 0)
                         goto finish;
-                if (r == 0)
+#if 1
+                if (curlm && r == 0)
                         break;
+#endif
 
                 r = ca_remote_next_request(rr, &id);
                 if (r == -ENODATA)
@@ -791,7 +797,7 @@ static int run(int argc, char *argv[]) {
                 }
 
                 if (curlm) {
-                        c = ca_chunk_new();
+                        c = ca_chunk_new(); /* TODO: use ref/unref and allocate a CaChunk for easy too to share the code */
                         if (!c) {
                                 r = log_oom();
                                 goto finish;
@@ -859,6 +865,7 @@ static int run(int argc, char *argv[]) {
         /* we start some action by calling perform right away */
         curl_multi_perform(curlm, &still_running);
 
+fprintf(stderr, "still_running: %i\n", still_running);
         while (still_running) {
                 struct timeval timeout;
                 int rc; /* select() return code */
@@ -914,16 +921,21 @@ static int run(int argc, char *argv[]) {
 
                 switch (rc) {
                         case -1:
+                                perror("select");
                                 /* select error */
                                 break;
                         case 0: /* timeout */
+                                perror("select");
+                                /* fallthrough */
                         default: /* action */
                                 curl_multi_perform(curlm, &still_running);
+                                fprintf(stderr, "still_running: %i...\n", still_running);
                                 break;
                 }
         }
 
         /* See how the transfers went */
+static int done = 0;
         while ((msg = curl_multi_info_read(curlm, &msgs_left))) {
                 if (msg->msg == CURLMSG_DONE) {
                         LIST_FOREACH(list, c, chunks) {
@@ -933,7 +945,12 @@ static int run(int argc, char *argv[]) {
                         }
 
                         if (!c)
+{
+        fprintf(stderr, "No found!\n");
                                 continue;
+}
+
+fprintf(stderr, "url: %s, done: %i\n", ca_chunk_get_url(c), ++done);
 
                         LIST_REMOVE(list, chunks, c);
 
@@ -983,6 +1000,7 @@ static int run(int argc, char *argv[]) {
                         }
                 }
         }
+fprintf(stderr, "Terminated! done: %i\n", done);
 
 flush:
         r = process_remote(rr, PROCESS_UNTIL_FINISHED);
