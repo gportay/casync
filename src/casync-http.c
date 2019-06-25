@@ -38,7 +38,6 @@ typedef enum ProcessUntil {
 
 typedef struct CaChunk {
         CaChunkID id;
-        char *url;
         CURL *curl;
         ReallocBuffer buffer;
         LIST_FIELDS(struct CaChunk, list);
@@ -561,9 +560,19 @@ static CaChunk *ca_chunk_free(CaChunk *c) {
 
         realloc_buffer_free(&c->buffer);
 
-        free(c->url);
-
         return mfree(c);
+}
+
+static const char *ca_chunk_get_url(CaChunk *c) {
+        char *url;
+
+        if (!c)
+                return NULL;
+
+        if (curl_easy_getinfo(c->curl, CURLINFO_EFFECTIVE_URL, &url))
+                return NULL;
+
+        return url;
 }
 
 static int ca_chunk_acquire_file(CaChunk *c, CURLM *curlm, const char *url, CaChunkID *id) {
@@ -644,11 +653,6 @@ static int ca_chunk_acquire_file(CaChunk *c, CURLM *curlm, const char *url, CaCh
 
         if (curlm) {
                 c->curl = curl;
-                c->url = strdup(url);
-                if (!c->url) {
-                        r = log_oom();
-                        goto finish;
-                }
 
                 if (curl_multi_add_handle(curlm, curl) != CURLM_OK) {
                         log_error("Failed to call curl_multi_add_handle for %s", url);
@@ -693,17 +697,17 @@ static int ca_chunk_acquire_file_process(CaChunk *c, CURLM *curlm) {
 
         if (IN_SET(arg_protocol, ARG_PROTOCOL_HTTP, ARG_PROTOCOL_HTTPS) && protocol_status != 200) {
                 if (arg_verbose)
-                        log_error("HTTP server failure %li while requesting %s.", protocol_status, c->url);
+                        log_error("HTTP server failure %li while requesting %s.", protocol_status, ca_chunk_get_url(c));
 
                 r = 0;
         } else if (arg_protocol == ARG_PROTOCOL_FTP && (protocol_status < 200 || protocol_status > 299)) {
                 if (arg_verbose)
-                        log_error("FTP server failure %li while requesting %s.", protocol_status, c->url);
+                        log_error("FTP server failure %li while requesting %s.", protocol_status, ca_chunk_get_url(c));
 
                 r = 0;
         } else if (arg_protocol == ARG_PROTOCOL_SFTP && (protocol_status != 0)) {
                 if (arg_verbose)
-                        log_error("SFTP server failure %li while requesting %s.", protocol_status, c->url);
+                        log_error("SFTP server failure %li while requesting %s.", protocol_status, ca_chunk_get_url(c));
 
                 r = 0;
         } else
@@ -712,7 +716,7 @@ static int ca_chunk_acquire_file_process(CaChunk *c, CURLM *curlm) {
 finish:
         if (curlm)
                 if (curl_multi_remove_handle(curlm, curl) != CURLM_OK)
-                        log_error("Failed to call curl_multi_remove_handle");
+                        log_error("Failed to call curl_multi_remove_handle for %s", ca_chunk_get_url(c));
 
         curl_easy_cleanup(curl);
         c->curl = NULL;
