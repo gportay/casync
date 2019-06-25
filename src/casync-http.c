@@ -535,6 +535,13 @@ static int make_easy(CURL **ret,
         if (c != CURLE_OK)
                 return log_error_curle(c, "Failed to set CURLOPT_PROTOCOLS");
 
+        if (IN_SET(arg_protocol, PROTOCOL_HTTP, PROTOCOL_HTTPS)) {
+                if (curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0) != CURLE_OK)
+                        log_error("Failed to set HTTP version to 2.0, ignoring.");
+                if (curl_easy_setopt(curl, CURLOPT_PIPEWAIT, 1L) != CURLE_OK)
+                        log_error("Failed to turn on pipelining or multiplexing, ignoring.");
+        }
+
         if (arg_protocol == PROTOCOL_SFTP) {
                 c = curl_easy_setopt(curl, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_AGENT);
                 if (c != CURLE_OK)
@@ -730,6 +737,7 @@ static int ca_chunk_acquire_file_end(CaChunk *c, CURLM *curlm)
 
 static CaProcess *ca_process_new(CaRemote *rr) {
         CaProcess *p;
+        CURLMcode mc;
         CURLM *curlm;
 
         if (!rr)
@@ -747,6 +755,15 @@ static CaProcess *ca_process_new(CaRemote *rr) {
                         free(p);
                         return NULL;
                 }
+
+                /* libcurl:
+                 * CURLMOPT_PIPELINING - enable HTTP pipelining and multiplexing
+                 * Added in 7.16.0. Multiplex support bit added in 7.43.0. HTTP/1 Pipelining support was disabled in 7.62.0. 
+                 * Since 7.62.0, CURLPIPE_MULTIPLEX is enabled by default. Before that, default was CURLPIPE_NOTHING.
+                 */
+                mc = curl_multi_setopt(curlm, CURLMOPT_PIPELINING, (long)CURLPIPE_HTTP1|CURLPIPE_MULTIPLEX);
+                if (mc != CURLM_OK)
+                        log_error_curlm(mc, "Failed to set CURLMOPT_PIPELINING, ignoring");
 
                 p->curlm = curlm;
         }
