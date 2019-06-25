@@ -18,6 +18,7 @@ static volatile sig_atomic_t quit = false;
 static int arg_log_level = -1;
 static bool arg_verbose = false;
 static curl_off_t arg_rate_limit_bps = 0;
+static long arg_max_host_connections = 5;
 
 typedef enum Protocol {
         PROTOCOL_HTTP,
@@ -765,6 +766,10 @@ static CaProcess *ca_process_new(CaRemote *rr) {
                 if (mc != CURLM_OK)
                         log_error_curlm(mc, "Failed to set CURLMOPT_PIPELINING, ignoring");
 
+                mc = curl_multi_setopt(curlm, CURLMOPT_MAX_HOST_CONNECTIONS, arg_max_host_connections);
+                if (mc != CURLM_OK)
+                        log_error_curlm(mc, "Failed to set CURLMOPT_MAX_HOST_CONNECTIONS, ignoring");
+
                 p->curlm = curlm;
         }
 
@@ -953,13 +958,15 @@ static int parse_argv(int argc, char *argv[]) {
 
         enum {
                 ARG_RATE_LIMIT_BPS = 0x100,
+                ARG_MAX_HOST_CONNECTIONS,
         };
 
         static const struct option options[] = {
-                { "help",           no_argument,       NULL, 'h'                },
-                { "log-level",      required_argument, NULL, 'l'                },
-                { "verbose",        no_argument,       NULL, 'v'                },
-                { "rate-limit-bps", required_argument, NULL, ARG_RATE_LIMIT_BPS },
+                { "help",                 no_argument,       NULL, 'h'                      },
+                { "log-level",            required_argument, NULL, 'l'                      },
+                { "verbose",              no_argument,       NULL, 'v'                      },
+                { "rate-limit-bps",       required_argument, NULL, ARG_RATE_LIMIT_BPS       },
+                { "max-host-connections", required_argument, NULL, ARG_MAX_HOST_CONNECTIONS },
                 {}
         };
 
@@ -1011,6 +1018,15 @@ static int parse_argv(int argc, char *argv[]) {
                                 return log_error_errno(r, "Unable to parse rate limit %s: %m", optarg);
                         if (arg_rate_limit_bps == 0 || arg_rate_limit_bps > UINT32_MAX)
                                 return log_error_errno(EINVAL, "Rate limit size cannot be zero or is out of range.");
+
+                        break;
+
+                case ARG_MAX_HOST_CONNECTIONS:
+                        r = safe_atou(optarg, (unsigned *)&arg_max_host_connections);
+                        if (r < 0)
+                                return log_error_errno(r, "Unable to parse max host connections %s: %m", optarg);
+                        if (arg_max_host_connections == 0 || arg_max_host_connections > UINT32_MAX)
+                                return log_error_errno(EINVAL, "Max host connections cannot be zero or is out of range.");
 
                         break;
 
