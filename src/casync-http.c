@@ -364,10 +364,10 @@ static void *queue_pop(Queue *q) {
 
         assert(q);
 
-        qi = q->head;
-        if (!qi)
-                return NULL;
+        if (LIST_IS_EMPTY(q->head))
+		return NULL;
 
+        qi = q->head;
         LIST_REMOVE(list, q->head, q->head);
         data = qi->data;
         free(qi);
