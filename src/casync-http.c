@@ -325,7 +325,7 @@ typedef struct QueueItem QueueItem;
 
 struct QueueItem {
         void *data;
-        LIST_FIELDS(struct QueueItem, list);
+        LIST_FIELDS(QueueItem, list);
 };
 
 typedef struct Queue {
@@ -413,8 +413,14 @@ static bool queue_is_empty(Queue *q) {
 }
 
 static void queue_free(Queue *q) {
+        QueueItem *curr, *prev;
+
         if (q == NULL)
                 return;
+
+        LIST_FOREACH_SAFE(list, curr, prev, q->head) {
+                free(curr);
+        }
 
         free(q);
 }
