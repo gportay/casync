@@ -333,7 +333,6 @@ typedef struct Queue {
 } Queue;
 
 static int queue_push(Queue *q, void *data) {
-        int r;
         QueueItem *qi;
 
         assert(q);
