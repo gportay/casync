@@ -727,15 +727,13 @@ static int ca_chunk_downloader_remote_step(CaChunkDownloader *dl) {
 
 /* Put chunk requests to the remote, return the number of chunks put */
 static int ca_chunk_downloader_put_chunks(CaChunkDownloader *dl) {
-        int i;
+        int i = 0;
 
-        for (i = 0; ; i++) {
+        /* TODO ca_remote_can_put_chunk can returns 0, thus I cannot while (handle = pop()) */
+        while (!queue_is_empty(dl->completed)) {
                 int r;
                 CURL *handle;
                 ChunkData *cd = NULL;
-
-                if (queue_is_empty(dl->completed))
-                        break;
 
                 r = ca_remote_can_put_chunk(dl->remote);
                 if (r == 0)
@@ -767,6 +765,8 @@ static int ca_chunk_downloader_put_chunks(CaChunkDownloader *dl) {
                 /* At this point, handle and chunk data are left "unconfigured"
                  * in the ready queue. They'll be reconfigured when re-used. */
                 queue_push(dl->ready, handle);
+
+                i++;
         }
 
         return i;
