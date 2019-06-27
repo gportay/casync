@@ -330,7 +330,6 @@ struct QueueItem {
 
 typedef struct Queue {
         LIST_HEAD(QueueItem, head);
-        uint64_t len;
         uint64_t n_added;   /* total number of items added */
         uint64_t n_removed; /* total number of items removed */
 } Queue;
@@ -353,7 +352,6 @@ static int queue_push(Queue *q, void *data) {
         LIST_APPEND(list, q->head, qi);
 
         q->n_added++;
-        q->len++;
 
         return 0;
 }
@@ -373,7 +371,6 @@ static void *queue_pop(Queue *q) {
         free(qi);
 
         q->n_removed++;
-        q->len--;
 
         return data;
 }
@@ -395,7 +392,6 @@ static void *queue_remove(Queue *q, void *data) {
         free(i);
 
         q->n_removed++;
-        q->len--;
 
         return data;
 }
@@ -453,10 +449,6 @@ struct CaChunkDownloader {
         Queue *completed;   /* CURL handles completed (ie. chunks waiting to be put to remote */
 
         char *store_url;
-
-        uint64_t n_iterations;
-        uint64_t sum_inprogress_len;
-        uint64_t sum_completed_len;
 };
 
 enum {
@@ -603,25 +595,6 @@ static CaChunkDownloader *ca_chunk_downloader_new(CaRemote *rr, const char *stor
 fail:
         ca_chunk_downloader_free(dl);
         return NULL;
-}
-
-#define AVERAGE(sum, n) ({ typeof(sum) _sum = (sum); typeof(n) _n = (n); _n > 0 ? _sum / _n : _sum; })
-
-static void ca_chunk_downloader_display_stats(CaChunkDownloader *dl) {
-        if (!arg_verbose)
-                return;
-
-        log_info("--- Chunk Downloader Stats ---\n"
-                 "Iterations: %" PRIu64 "\n"
-                 "CURL handles totals: added=%" PRIu64 ", removed=%" PRIu64 "\n"
-                 "Chunks: %" PRIu64 " put to remote\n"
-                 "Queues average size: inprogress=%" PRIu64 ", completed=%" PRIu64 "\n"
-                 "Queues current size: inprogress=%" PRIu64 ", completed=%" PRIu64,
-                 dl->n_iterations,
-                 dl->inprogress->n_added, dl->inprogress->n_removed,
-                 dl->completed->n_removed,
-                 AVERAGE(dl->sum_inprogress_len, dl->n_iterations), AVERAGE(dl->sum_completed_len, dl->n_iterations),
-                 dl->inprogress->len, dl->completed->len);
 }
 
 static int configure_handle_for_chunk(CURL *handle, const char *store_url, CaChunkID *id) {
@@ -962,10 +935,6 @@ static int download_chunks(CaChunkDownloader *dl) {
                 r = ca_chunk_downloader_wait(dl);
                 if (r < 0)
                         return r;
-
-                dl->n_iterations++;
-                dl->sum_inprogress_len += dl->inprogress->len;
-                dl->sum_completed_len += dl->completed->len;
         }
 }
 
@@ -1305,9 +1274,6 @@ static int run(int argc, char *argv[]) {
                         return log_oom();
 
                 r = download_chunks(dl);
-
-                ca_chunk_downloader_display_stats(dl);
-
                 if (r == -EPIPE)
                         return 0;
                 if (r < 0)
