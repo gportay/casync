@@ -400,12 +400,6 @@ static void *queue_remove(Queue *q, void *data) {
         return data;
 }
 
-static uint64_t queue_len(Queue *q) {
-        assert(q);
-
-        return q->len;
-}
-
 static bool queue_is_empty(Queue *q) {
         assert(q);
 
@@ -655,12 +649,10 @@ static int configure_handle_for_chunk(CURL *handle, const char *store_url, CaChu
 /* Get chunk requests from remote, configure curl handles accordingly,
  * add to curl multi, and return the number of chunk requests handled. */
 static int ca_chunk_downloader_fetch_chunk_requests(CaChunkDownloader *dl) {
-        int i;
-        int n_handles_avail;
+        QueueItem *i, *n;
+        int num = 0;
 
-        n_handles_avail = queue_len(dl->ready);
-
-        for (i = 0; i < n_handles_avail; i++) {
+        LIST_FOREACH_SAFE(list, i, n, dl->ready->head) {
                 int r, running_handles;
                 CURLMcode c;
                 CaChunkID id;
@@ -702,9 +694,11 @@ static int ca_chunk_downloader_fetch_chunk_requests(CaChunkDownloader *dl) {
                 c = curl_multi_perform(dl->multi, &running_handles);
                 if (c != CURLM_OK)
                         return log_error_curlm(c, "Failed to perform curl multi");
+
+                num++;
         }
 
-        return i;
+        return num;
 }
 
 /* Do the communication with the remote, return a status code */
@@ -966,11 +960,8 @@ static int download_chunks(CaChunkDownloader *dl) {
                 r = ca_chunk_downloader_step(dl);
                 if (r < 0)
                         return r;
-                if (r == CA_CHUNK_DOWNLOADER_FINISHED) {
-                        assert(queue_len(dl->inprogress) == 0);
-                        assert(queue_len(dl->completed) == 0);
+                if (r == CA_CHUNK_DOWNLOADER_FINISHED)
                         return 0;
-                }
 
                 r = ca_chunk_downloader_wait(dl);
                 if (r < 0)
