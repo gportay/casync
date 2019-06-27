@@ -330,8 +330,6 @@ struct QueueItem {
 
 typedef struct Queue {
         LIST_HEAD(QueueItem, head);
-        uint64_t n_added;   /* total number of items added */
-        uint64_t n_removed; /* total number of items removed */
 } Queue;
 
 static int queue_push(Queue *q, void *data) {
@@ -351,8 +349,6 @@ static int queue_push(Queue *q, void *data) {
         LIST_INIT(list, qi);
         LIST_APPEND(list, q->head, qi);
 
-        q->n_added++;
-
         return 0;
 }
 
@@ -369,8 +365,6 @@ static void *queue_pop(Queue *q) {
         LIST_REMOVE(list, q->head, q->head);
         data = qi->data;
         free(qi);
-
-        q->n_removed++;
 
         return data;
 }
@@ -390,8 +384,6 @@ static void *queue_remove(Queue *q, void *data) {
 
         LIST_REMOVE(list, q->head, i);
         free(i);
-
-        q->n_removed++;
 
         return data;
 }
@@ -650,8 +642,7 @@ static int ca_chunk_downloader_fetch_chunk_requests(CaChunkDownloader *dl) {
                 if (r < 0)
                         return log_error_errno(r, "Failed to configure handle: %m");
 
-                log_debug("Acquiring chunk %" PRIu64 ": %s", dl->inprogress->n_added,
-                          get_curl_effective_url(handle));
+                log_debug("Acquiring chunk %s", get_curl_effective_url(handle));
 
                 c = curl_multi_add_handle(dl->multi, handle);
                 if (c != CURLM_OK)
@@ -904,9 +895,6 @@ static int ca_chunk_downloader_wait(CaChunkDownloader *dl) {
         r = get_remote_io_as_curl_waitfds(dl->remote, &waitfds[0], &waitfds[1]);
         if (r < 0)
                 return log_error_errno(r, "Failed to get remote io: %m");
-
-        log_trace("SLEEP  - handles: added=%" PRIu64 ", rem=%" PRIu64 " - chunks: put=%" PRIu64,
-                  dl->inprogress->n_added, dl->inprogress->n_removed, dl->completed->n_removed);
 
         c = curl_multi_wait(dl->multi, waitfds, ELEMENTSOF(waitfds), curl_timeout_ms, &n);
         if (c != CURLM_OK)
