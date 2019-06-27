@@ -337,20 +337,20 @@ typedef struct Queue {
 
 static int queue_push(Queue *q, void *data) {
         int r;
-        QueueItem *item;
+        QueueItem *qi;
 
         assert(q);
         assert(data);
 
-        item = new0(QueueItem, 1);
-        if (!item) {
+        qi = new0(QueueItem, 1);
+        if (!qi) {
                 r = log_oom();
                 return r;
         }
 
-        item->data = data;
-        LIST_INIT(list, item);
-        LIST_APPEND(list, q->head, item);
+        qi->data = data;
+        LIST_INIT(list, qi);
+        LIST_APPEND(list, q->head, qi);
 
         q->n_added++;
         q->len++;
@@ -359,18 +359,18 @@ static int queue_push(Queue *q, void *data) {
 }
 
 static void *queue_pop(Queue *q) {
-        QueueItem *item;
+        QueueItem *qi;
         void *data;
 
         assert(q);
 
-        item = q->head;
-        if (!item)
+        qi = q->head;
+        if (!qi)
                 return NULL;
 
         LIST_REMOVE(list, q->head, q->head);
-        data = item->data;
-        free(item);
+        data = qi->data;
+        free(qi);
 
         q->n_removed++;
         q->len--;
@@ -379,20 +379,20 @@ static void *queue_pop(Queue *q) {
 }
 
 static void *queue_remove(Queue *q, void *data) {
-        QueueItem *curr, *prev;
+        QueueItem *i, *n;
 
         assert(q);
 
-        LIST_FOREACH_SAFE(list, curr, prev, q->head) {
-                if (curr->data == data)
+        LIST_FOREACH_SAFE(list, i, n, q->head) {
+                if (i->data == data)
                         break;
         }
 
-        if (!curr)
+        if (!i)
                 return NULL;
 
-        LIST_REMOVE(list, q->head, curr);
-        free(curr);
+        LIST_REMOVE(list, q->head, i);
+        free(i);
 
         q->n_removed++;
         q->len--;
@@ -413,13 +413,13 @@ static bool queue_is_empty(Queue *q) {
 }
 
 static void queue_free(Queue *q) {
-        QueueItem *curr, *prev;
+        QueueItem *i, *n;
 
         if (q == NULL)
                 return;
 
-        LIST_FOREACH_SAFE(list, curr, prev, q->head) {
-                free(curr);
+        LIST_FOREACH_SAFE(list, i, n, q->head) {
+                free(i);
         }
 
         free(q);
@@ -1308,8 +1308,7 @@ static int run(int argc, char *argv[]) {
                 /* set the store url */
                 current_store = current_store % n_stores;
                 if (wstore_url)
-                        store_url = current_store == 0 ? wstore_url :
-                                argv[current_store + _CA_REMOTE_ARG_MAX - 1];
+                        store_url = current_store == 0 ? wstore_url : argv[current_store + _CA_REMOTE_ARG_MAX - 1];
                 else
                         store_url = argv[current_store + _CA_REMOTE_ARG_MAX];
                 /* current_store++; */
