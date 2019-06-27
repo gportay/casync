@@ -649,14 +649,13 @@ static int configure_handle_for_chunk(CURL *handle, const char *store_url, CaChu
 /* Get chunk requests from remote, configure curl handles accordingly,
  * add to curl multi, and return the number of chunk requests handled. */
 static int ca_chunk_downloader_fetch_chunk_requests(CaChunkDownloader *dl) {
-        QueueItem *i, *n;
+        CURL *handle;
         int num = 0;
 
-        LIST_FOREACH_SAFE(list, i, n, dl->ready->head) {
+        while ((handle = queue_pop(dl->ready))) {
                 int r, running_handles;
                 CURLMcode c;
                 CaChunkID id;
-                CURL *handle;
 
                 r = ca_remote_has_pending_requests(dl->remote);
                 if (r < 0)
@@ -673,9 +672,6 @@ static int ca_chunk_downloader_fetch_chunk_requests(CaChunkDownloader *dl) {
                         return r;
                 if (r < 0)
                         return log_error_errno(r, "Failed to query next request: %m");
-
-                handle = queue_pop(dl->ready);
-                assert(handle);
 
                 r = configure_handle_for_chunk(handle, dl->store_url, &id);
                 if (r < 0)
