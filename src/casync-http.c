@@ -11,6 +11,7 @@
 #include "cautil.h"
 #include "realloc-buffer.h"
 #include "util.h"
+#include "list.h"
 
 /* The maximum number of active chunks is defined as the sum of:
  * - number of chunks added to curl multi for download
@@ -324,12 +325,11 @@ typedef struct QueueItem QueueItem;
 
 struct QueueItem {
         void *data;
-        QueueItem *next;
+        LIST_FIELDS(struct QueueItem, list);
 };
 
 typedef struct Queue {
-        QueueItem *head;
-        QueueItem *tail;
+        LIST_HEAD(QueueItem, head);
         uint64_t len;
         uint64_t n_added;   /* total number of items added */
         uint64_t n_removed; /* total number of items removed */
@@ -349,16 +349,8 @@ static int queue_push(Queue *q, void *data) {
         }
 
         item->data = data;
-        item->next = NULL;
-
-        if (q->tail) {
-                q->tail->next = item;
-                q->tail = item;
-        } else {
-                assert(!q->head);
-                q->head = item;
-                q->tail = item;
-        }
+        LIST_INIT(list, item);
+        LIST_APPEND(list, q->head, item);
 
         q->n_added++;
         q->len++;
@@ -376,10 +368,7 @@ static void *queue_pop(Queue *q) {
         if (!item)
                 return NULL;
 
-        q->head = item->next;
-        if (!q->head)
-                q->tail = NULL;
-
+        LIST_REMOVE(list, q->head, q->head);
         data = item->data;
         free(item);
 
@@ -394,21 +383,15 @@ static void *queue_remove(Queue *q, void *data) {
 
         assert(q);
 
-        for (prev = NULL, curr = q->head; curr; prev = curr, curr = curr->next)
+        LIST_FOREACH_SAFE(list, curr, prev, q->head) {
                 if (curr->data == data)
                         break;
+        }
 
-        if (curr == NULL)
-                return NULL; /* not found */
+        if (!curr)
+                return NULL;
 
-        if (prev == NULL)
-                q->head = curr->next; /* removing first item */
-        else
-                prev->next = curr->next; /* removing later item */
-
-        if (q->tail == curr)
-                q->tail = prev; /* removed last item */
-
+        LIST_REMOVE(list, q->head, curr);
         free(curr);
 
         q->n_removed++;
@@ -426,7 +409,7 @@ static uint64_t queue_len(Queue *q) {
 static bool queue_is_empty(Queue *q) {
         assert(q);
 
-        return q->head == NULL;
+        return LIST_IS_EMPTY(q->head);
 }
 
 static void queue_free(Queue *q) {
@@ -437,7 +420,14 @@ static void queue_free(Queue *q) {
 }
 
 static Queue *queue_new(void) {
-        return new0(Queue, 1);
+        Queue *q;
+
+        q = new0(Queue, 1);
+        if (!q)
+                return NULL;
+
+        LIST_HEAD_INIT(q->head);
+        return q;
 }
 
 /*
