@@ -321,100 +321,70 @@ static ChunkData *chunk_data_new(void) {
  * simple queue implementation
  */
 
-typedef struct QueueItem QueueItem;
+typedef struct Handle Handle;
 
-struct QueueItem {
-        void *data;
-        LIST_FIELDS(QueueItem, list);
+struct Handle {
+        CURL *handle;
+        LIST_FIELDS(Handle, list);
 };
 
-typedef struct Queue {
-        LIST_HEAD(QueueItem, head);
-} Queue;
+static int handle_push(Handle *h, CURL *curl) {
+        Handle *n;
 
-static int queue_push(Queue *q, void *data) {
-        QueueItem *qi;
+        assert(h);
+        assert(curl);
 
-        assert(q);
-        assert(data);
+        n = new0(Handle, 1);
+        if (!n)
+                return log_oom();
 
-        qi = new0(QueueItem, 1);
-        if (!qi) {
-                r = log_oom();
-                return r;
-        }
-
-        qi->data = data;
-        LIST_INIT(list, qi);
-        LIST_APPEND(list, q->head, qi);
+        n->handle = curl;
+        LIST_INIT(list, n);
+        LIST_APPEND(list, h, n);
 
         return 0;
 }
 
-static void *queue_pop(Queue *q) {
-        QueueItem *qi;
-        void *data;
+static CURL *handle_pop(Handle *h) {
+        Handle *r;
+        CURL *handle;
 
-        assert(q);
+        assert(h);
 
-        if (LIST_IS_EMPTY(q->head))
+        if (LIST_IS_EMPTY(h))
 		return NULL;
 
-        qi = q->head;
-        LIST_REMOVE(list, q->head, q->head);
-        data = qi->data;
-        free(qi);
+        r = h;
+        LIST_REMOVE(list, h, h);
+        handle = r->handle;
+        free(r);
 
-        return data;
+        return handle;
 }
 
-static void *queue_remove(Queue *q, void *data) {
-        QueueItem *i, *n;
+static CURL *handle_remove(Handle *h, CURL *curl) {
+        Handle *i, *n;
 
-        assert(q);
+        assert(h);
 
-        LIST_FOREACH_SAFE(list, i, n, q->head) {
-                if (i->data == data)
+        LIST_FOREACH_SAFE(list, i, n, h) {
+                if (i->handle == curl)
                         break;
         }
 
         if (!i)
                 return NULL;
 
-        LIST_REMOVE(list, q->head, i);
+        LIST_REMOVE(list, h, i);
         free(i);
 
-        return data;
+        return curl;
 }
 
-static bool queue_is_empty(Queue *q) {
-        assert(q);
+static bool handle_is_empty(Handle *h) {
+        assert(h);
 
-        return LIST_IS_EMPTY(q->head);
-}
-
-static void queue_free(Queue *q) {
-        QueueItem *i, *n;
-
-        if (q == NULL)
-                return;
-
-        LIST_FOREACH_SAFE(list, i, n, q->head) {
-                free(i);
-        }
-
-        free(q);
-}
-
-static Queue *queue_new(void) {
-        Queue *q;
-
-        q = new0(Queue, 1);
-        if (!q)
-                return NULL;
-
-        LIST_HEAD_INIT(q->head);
-        return q;
+        return LIST_IS_EMPTY(h);
 }
 
 /*
@@ -435,9 +405,9 @@ typedef struct CaChunkDownloader CaChunkDownloader;
 struct CaChunkDownloader {
         CaRemote *remote;
         CURLM *multi;
-        Queue *ready;       /* CURL handles waiting to be used */
-        Queue *inprogress;  /* CURL handles in use (ie. added to curl multi) */
-        Queue *completed;   /* CURL handles completed (ie. chunks waiting to be put to remote */
+        LIST_HEAD(Handle, ready);       /* CURL handles waiting to be used */
+        LIST_HEAD(Handle, inprogress);  /* CURL handles in use (ie. added to curl multi) */
+        LIST_HEAD(Handle, completed);   /* CURL handles completed (ie. chunks waiting to be put to remote */
 
         char *store_url;
 };
@@ -502,7 +472,7 @@ static void ca_chunk_downloader_free(CaChunkDownloader *dl) {
         if (dl == NULL)
                 return;
 
-        while ((handle = queue_pop(dl->inprogress))) {
+        while ((handle = handle_pop(dl->inprogress))) {
                 CURLMcode c;
 
                 c = curl_multi_remove_handle(dl->multi, handle);
@@ -513,20 +483,27 @@ static void ca_chunk_downloader_free(CaChunkDownloader *dl) {
                 curl_easy_cleanup(handle);
         }
 
-        while ((handle = queue_pop(dl->ready))) {
+        while ((handle = handle_pop(dl->ready))) {
                 chunk_data_free(get_curl_private(handle));
                 curl_easy_cleanup(handle);
         }
 
-        while ((handle = queue_pop(dl->completed))) {
+        while ((handle = handle_pop(dl->completed))) {
                 chunk_data_free(get_curl_private(handle));
                 curl_easy_cleanup(handle);
         }
 
         free(dl->store_url);
-        queue_free(dl->ready);
-        queue_free(dl->inprogress);
-        queue_free(dl->completed);
+        Handle *i, *n;
+        LIST_FOREACH_SAFE(list, i, n, dl->ready) {
+                free(i);
+        }
+        LIST_FOREACH_SAFE(list, i, n, dl->inprogress) {
+                free(i);
+        }
+        LIST_FOREACH_SAFE(list, i, n, dl->completed) {
+                free(i);
+        }
         curl_multi_cleanup(dl->multi);
         ca_remote_unref(dl->remote);
 
@@ -550,17 +527,9 @@ static CaChunkDownloader *ca_chunk_downloader_new(CaRemote *rr, const char *stor
         if (r < 0)
                 goto fail;
 
-        dl->ready = queue_new();
-        if (!dl->ready)
-                goto fail;
-
-        dl->inprogress = queue_new();
-        if (!dl->inprogress)
-                goto fail;
-
-        dl->completed = queue_new();
-        if (!dl->completed)
-                goto fail;
+        LIST_HEAD_INIT(dl->ready);
+        LIST_HEAD_INIT(dl->inprogress);
+        LIST_HEAD_INIT(dl->completed);
 
         for (i = 0; i < arg_max_active_chunks; i++) {
                 CURL *handle = NULL;
@@ -574,7 +543,8 @@ static CaChunkDownloader *ca_chunk_downloader_new(CaRemote *rr, const char *stor
                 if (r < 0)
                         goto fail;
 
-                queue_push(dl->ready, handle);
+                fprintf(stderr, "%s@%i dl->ready: %p\n", __func__, __LINE__, dl->ready);
+                handle_push(dl->ready, handle);
         }
 
         dl->store_url = strdup(store_url);
@@ -616,7 +586,7 @@ static int ca_chunk_downloader_fetch_chunk_requests(CaChunkDownloader *dl) {
         CURL *handle;
         int num = 0;
 
-        while ((handle = queue_pop(dl->ready))) {
+        while ((handle = handle_pop(dl->ready))) {
                 int r, running_handles;
                 CURLMcode c;
                 CaChunkID id;
@@ -647,7 +617,8 @@ static int ca_chunk_downloader_fetch_chunk_requests(CaChunkDownloader *dl) {
                 if (c != CURLM_OK)
                         return log_error_curlm(c, "Failed to add to multi handle");
 
-                queue_push(dl->inprogress, handle);
+                fprintf(stderr, "%s@%i dl->inprogress: %p\n", __func__, __LINE__, dl->inprogress);
+                handle_push(dl->inprogress, handle);
 
                 /* We know there must be something to do, since we just added something. */
                 c = curl_multi_perform(dl->multi, &running_handles);
@@ -693,7 +664,7 @@ static int ca_chunk_downloader_put_chunks(CaChunkDownloader *dl) {
         int i = 0;
 
         /* TODO ca_remote_can_put_chunk can returns 0, thus I cannot while (handle = pop()) */
-        while (!queue_is_empty(dl->completed)) {
+        while (!handle_is_empty(dl->completed)) {
                 int r;
                 CURL *handle;
                 ChunkData *cd = NULL;
@@ -706,7 +677,7 @@ static int ca_chunk_downloader_put_chunks(CaChunkDownloader *dl) {
                 if (r < 0)
                         return log_error_errno(r, "Failed to query can put chunk: %m");
 
-                handle = queue_pop(dl->completed);
+                handle = handle_pop(dl->completed);
                 assert(handle);
 
                 cd = get_curl_private(handle);
@@ -727,7 +698,8 @@ static int ca_chunk_downloader_put_chunks(CaChunkDownloader *dl) {
 
                 /* At this point, handle and chunk data are left "unconfigured"
                  * in the ready queue. They'll be reconfigured when re-used. */
-                queue_push(dl->ready, handle);
+                fprintf(stderr, "%s@%i dl->ready: %p\n", __func__, __LINE__, dl->ready);
+                handle_push(dl->ready, handle);
 
                 i++;
         }
@@ -794,8 +766,9 @@ static int ca_chunk_downloader_process_curl_multi(CaChunkDownloader *dl) {
                 if (cm != CURLM_OK)
                         return log_error_curlm(cm, "Failed to remove curl handle");
 
-                queue_remove(dl->inprogress, handle);
-                queue_push(dl->completed, handle);
+                handle_remove(dl->inprogress, handle);
+                fprintf(stderr, "%s@%i dl->completed: %p\n", __func__, __LINE__, dl->completed);
+                handle_push(dl->completed, handle);
         }
 
         return i;
