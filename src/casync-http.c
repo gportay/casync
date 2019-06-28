@@ -265,7 +265,7 @@ static int make_curl_easy_handle(CURL **ret,
 }
 
 static int make_curl_multi_handle(CURLM **ret) {
-        _cleanup_(curl_multi_cleanupp) CURLM *h = NULL;
+        _cleanup_(curl_multi_cleanup) CURLM *h = NULL;
 
         assert(ret);
 
