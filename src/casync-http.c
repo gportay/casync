@@ -560,10 +560,11 @@ static int make_easy(CURL **ret,
                         return log_error_curle(c, "Failed to set CURLOPT_MAX_RECV_SPEED_LARGE");
         }
 
-        if (arg_ssl_trust_peer)
+        if (arg_ssl_trust_peer) {
                 c = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false);
                 if (c != CURLE_OK)
                         return log_error_curle(c, "Failed to set CURLOPT_SSL_VERIFYPEER");
+        }
 
         c = curl_easy_setopt(curl, CURLOPT_VERBOSE, arg_log_level > 4);
         if (c != CURLE_OK)
@@ -965,6 +966,7 @@ static int parse_argv(int argc, char *argv[]) {
         enum {
                 ARG_RATE_LIMIT_BPS = 0x100,
                 ARG_MAX_HOST_CONNECTIONS,
+                ARG_SSL_TRUST_PEER,
         };
 
         static const struct option options[] = {
