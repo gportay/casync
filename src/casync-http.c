@@ -220,14 +220,14 @@ static int make_curl_easy_handle(CURL **ret,
                          arg_protocol == PROTOCOL_SFTP ? CURLPROTO_SFTP :
                          CURLPROTO_HTTP | CURLPROTO_HTTPS);
 
+        if (arg_protocol == PROTOCOL_SFTP)
+                CURL_SETOPT_EASY_CANFAIL(h, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_AGENT);
+
         if (IN_SET(arg_protocol, PROTOCOL_HTTP, PROTOCOL_HTTPS)) {
                 /* Default since libcurl 7.62.0 */
                 CURL_SETOPT_EASY_CANFAIL(h, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
                 CURL_SETOPT_EASY_CANFAIL(h, CURLOPT_PIPEWAIT, 1l);
         }
-
-        if (arg_protocol == PROTOCOL_SFTP)
-                CURL_SETOPT_EASY_CANFAIL(h, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_AGENT);
 
         if (arg_rate_limit_bps > 0) {
                 CURL_SETOPT_EASY(h, CURLOPT_MAX_SEND_SPEED_LARGE, arg_rate_limit_bps);
@@ -601,7 +601,7 @@ static int ca_chunk_downloader_fetch_chunk_requests(CaChunkDownloader *dl) {
         int num = 0;
 
         LIST_FOREACH_SAFE(list, i, n, dl->ready->head) {
-                int r, running_handles;
+                int r;
                 CURLMcode c;
                 CaChunkID id;
                 CURL *handle;
@@ -636,12 +636,6 @@ static int ca_chunk_downloader_fetch_chunk_requests(CaChunkDownloader *dl) {
                         return log_error_curlm(c, "Failed to add to multi handle");
 
                 queue_push(dl->inprogress, handle);
-
-                /* We know there must be something to do, since we just added something. */
-                c = curl_multi_perform(dl->multi, &running_handles);
-                if (c != CURLM_OK)
-                        return log_error_curlm(c, "Failed to perform curl multi");
-
                 num++;
         }
 
@@ -771,8 +765,6 @@ static int ca_chunk_downloader_process_curl_multi(CaChunkDownloader *dl) {
                                   protocol_str(arg_protocol), protocol_status,
                                   effective_url);
 
-                        // TODO support multiple stores
-
                         /* No more stores? Set current_store to a special value
                          * to indicate failure. */
                         cd->current_store = SIZE_MAX;
@@ -794,10 +786,8 @@ static int ca_chunk_downloader_step(CaChunkDownloader *dl) {
 
         /* Handle curl activity */
         r = ca_chunk_downloader_process_curl_multi(dl);
-        if (r < 0) {
-                log_error("Failed while processing curl multi");
-                return r;
-        }
+        if (r < 0)
+                return log_error_errno(r, "Failed while processing curl multi: %m");
         if (r > 0)
                 log_trace("Processed %d curl messages", r);
 
