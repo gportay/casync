@@ -27,13 +27,13 @@ int main(int argc, char **argv) {
 
                 _cleanup_(safe_fclosep) FILE *f = fopen(name, "r");
                 if (!f) {
-                        log_error_errno(errno, "Failed to open %s: %m", name);
+                        log_error_errno(-errno, "Failed to open %s: %m", name);
                         return EXIT_FAILURE;
                 }
 
                 size = fread(buf, 1, sizeof(buf), f);
                 if (size < 0) {
-                        log_error_errno(errno, "Failed to read %s: %m", name);
+                        log_error_errno(-errno, "Failed to read %s: %m", name);
                         return EXIT_FAILURE;
                 }
 

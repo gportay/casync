@@ -210,7 +210,7 @@ int main(int argc, char *argv[]) {
                                 if (errno == EAGAIN)
                                         goto wait_for_event;
 
-                                r = log_error_errno(errno,
+                                r = log_error_errno(-errno,
                                                     "Failed to read notification datagram: %m");
                                 goto finish;
                         }
@@ -222,12 +222,12 @@ int main(int argc, char *argv[]) {
                         /* Now we know the message fit in the buffer, now read it properly. */
                         k = recv(fd, buffer, buffer_size, 0);
                         if (k < 0) {
-                                r = log_error_errno(errno,
+                                r = log_error_errno(-errno,
                                                     "Failed to consume notification datagram: %m");
                                 goto finish;
                         }
                         if (k != n) {
-                                r = log_error_errno(EIO,
+                                r = log_error_errno(-EIO,
                                                     "Consumed notification datagram has different size than original: %m");
                                 goto finish;
                         }
@@ -271,7 +271,7 @@ wait_for_event:
                         if (errno == EINTR) /* got a SIGCHLD or a SIGTERM/SIGINT? */
                                 continue;
 
-                        r = log_error_errno(errno, "Failed to ppoll(): %m");
+                        r = log_error_errno(-errno, "Failed to ppoll(): %m");
                         goto finish;
                 }
 

@@ -171,7 +171,7 @@ int ca_gc_cleanup_unused(CaStore *store, CaChunkCollection *coll, unsigned flags
 
                 if (!(flags & CA_GC_DRY_RUN)) {
                         if (unlinkat(subdir_fd, chunk, 0) < 0) {
-                                log_error_errno(errno,
+                                log_error_errno(-errno,
                                                 "Failed to unlink chunk file \"%s\", ignoring: %m", chunk);
                                 continue;
                         }

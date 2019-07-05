@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
         if (path) {
                 fd = open(path, O_RDONLY|O_CLOEXEC|O_NOCTTY);
                 if (fd < 0) {
-                        log_error_errno(errno, "Failed to open %s: %m", path);
+                        log_error_errno(-errno, "Failed to open %s: %m", path);
                         goto finish;
                 }
         } else
@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
 
                 n = read(fd, buffer, sizeof(buffer));
                 if (n < 0) {
-                        log_error_errno(errno, "Failed to read: %m");
+                        log_error_errno(-errno, "Failed to read: %m");
                         goto finish;
                 }
                 if (n == 0) /* EOF */

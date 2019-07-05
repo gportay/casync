@@ -469,7 +469,7 @@ static int parse_argv(int argc, char *argv[]) {
                         if (r < 0)
                                 return log_error_errno(r, "Unable to parse rate limit %s: %m", optarg);
                         if (arg_rate_limit_bps == 0)
-                                return log_error_errno(EINVAL, "Rate limit size cannot be zero.");
+                                return log_error_errno(-EINVAL, "Rate limit size cannot be zero.");
 
                         break;
 
@@ -658,7 +658,7 @@ static int parse_argv(int argc, char *argv[]) {
                                 return log_error_errno(cc, "Failed to parse --compression= parameter: %s", optarg);
 
                         if (!compressor_is_supported(cc))
-                                return log_error_errno(EINVAL,
+                                return log_error_errno(-EINVAL,
                                                        "Compiled without support for %s compression",
                                                        ca_compression_type_to_string(cc));
 
@@ -1245,11 +1245,11 @@ static int verb_make(int argc, char *argv[]) {
 
                 input_fd = open(input, O_CLOEXEC|O_RDONLY|O_NOCTTY);
                 if (input_fd < 0)
-                        return log_error_errno(errno, "Failed to open %s: %m", input);
+                        return log_error_errno(-errno, "Failed to open %s: %m", input);
         }
 
         if (fstat(input_fd, &st) < 0)
-                return log_error_errno(errno, "Failed to stat input: %m");
+                return log_error_errno(-errno, "Failed to stat input: %m");
 
         if (S_ISDIR(st.st_mode)) {
 
@@ -1545,14 +1545,14 @@ static int verb_extract(int argc, char *argv[]) {
                         output_fd = open(output, O_CLOEXEC|O_RDONLY|O_NOCTTY|O_DIRECTORY);
 
                 if (output_fd < 0 && errno != ENOENT)
-                        return log_error_errno(errno, "Failed to open %s: %m", output);
+                        return log_error_errno(-errno, "Failed to open %s: %m", output);
         }
 
         if (output_fd >= 0) {
                 struct stat st;
 
                 if (fstat(output_fd, &st) < 0)
-                        return log_error_errno(errno, "Failed to stat output: %m");
+                        return log_error_errno(-errno, "Failed to stat output: %m");
 
                 if (S_ISDIR(st.st_mode)) {
 
@@ -2165,7 +2165,7 @@ static int verb_list(int argc, char *argv[]) {
                 if (input_class == CA_LOCATOR_PATH) {
                         input_fd = open(input, O_CLOEXEC|O_RDONLY|O_NOCTTY);
                         if (input_fd < 0)
-                                return log_error_errno(errno, "Failed to open \"%s\": %m", input);
+                                return log_error_errno(-errno, "Failed to open \"%s\": %m", input);
                 }
         }
 
@@ -2173,7 +2173,7 @@ static int verb_list(int argc, char *argv[]) {
                 struct stat st;
 
                 if (fstat(input_fd, &st) < 0)
-                        return log_error_errno(errno, "Failed to stat input: %m");
+                        return log_error_errno(-errno, "Failed to stat input: %m");
 
                 if (S_ISDIR(st.st_mode)) {
                         if (operation == _LIST_OPERATION_INVALID)
@@ -2482,7 +2482,7 @@ static int verb_digest(int argc, char *argv[]) {
                 if (input_class == CA_LOCATOR_PATH) {
                         input_fd = open(input, O_CLOEXEC|O_RDONLY|O_NOCTTY);
                         if (input_fd < 0)
-                                return log_error_errno(errno, "Failed to open %s: %m", input);
+                                return log_error_errno(-errno, "Failed to open %s: %m", input);
                 }
         }
 
@@ -2490,7 +2490,7 @@ static int verb_digest(int argc, char *argv[]) {
                 struct stat st;
 
                 if (fstat(input_fd, &st) < 0)
-                        return log_error_errno(errno, "Failed to stat input: %m");
+                        return log_error_errno(-errno, "Failed to stat input: %m");
 
                 if (S_ISDIR(st.st_mode)) {
 
@@ -3054,13 +3054,13 @@ static int verb_mkdev(int argc, char *argv[]) {
 #if HAVE_UDEV
         udev = udev_new();
         if (!udev) {
-                r = log_error_errno(errno, "Failed to allocate udev context: %m");
+                r = log_error_errno(-errno, "Failed to allocate udev context: %m");
                 goto finish;
         }
 
         monitor = udev_monitor_new_from_netlink(udev, "udev");
         if (!monitor) {
-                r = log_error_errno(errno, "Failed to acquire udev monitor: %m");
+                r = log_error_errno(-errno, "Failed to acquire udev monitor: %m");
                 goto finish;
         }
 
@@ -3078,7 +3078,7 @@ static int verb_mkdev(int argc, char *argv[]) {
 
         d = udev_device_new_from_devnum(udev, 'b', devnum);
         if (!d) {
-                r = log_error_errno(errno, "Failed to get NBD udev device: %m");
+                r = log_error_errno(-errno, "Failed to get NBD udev device: %m");
                 goto finish;
         }
 
@@ -3090,7 +3090,7 @@ static int verb_mkdev(int argc, char *argv[]) {
 
         if (make_symlink) {
                 if (symlink(path, name) < 0) {
-                        r = log_error_errno(errno, "Failed to create symlink %s → %s: %m", name, path);
+                        r = log_error_errno(-errno, "Failed to create symlink %s → %s: %m", name, path);
                         goto finish;
                 }
 
@@ -3873,13 +3873,13 @@ static int verb_udev(int argc, char *argv[]) {
                 if (errno == ENOENT)
                         return 0;
 
-                return log_error_errno(errno, "Failed to open %s: %m", p);
+                return log_error_errno(-errno, "Failed to open %s: %m", p);
         }
 
         if (flock(fd, LOCK_SH|LOCK_NB) < 0) {
 
                 if (errno != EWOULDBLOCK)
-                        return log_error_errno(errno, "Failed to check if %s is locked: %m", p);
+                        return log_error_errno(-errno, "Failed to check if %s is locked: %m", p);
 
                 /* If we got EWOULDBLOCK, everything is good, there's a casync locking this */
 
@@ -3891,7 +3891,7 @@ static int verb_udev(int argc, char *argv[]) {
 
         n = read(fd, pretty, sizeof(pretty));
         if (n < 0)
-                return log_error_errno(errno, "Failed to read from %s: %m", p);
+                return log_error_errno(-errno, "Failed to read from %s: %m", p);
         if ((size_t) n >= sizeof(pretty)) {
                 log_error("Stored name read from %s too long.", p);
                 return -EINVAL;

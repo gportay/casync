@@ -706,7 +706,7 @@ static int parse_argv(int argc, char *argv[]) {
                         if (r < 0)
                                 return log_error_errno(r, "Unable to parse rate limit %s: %m", optarg);
                         if (arg_rate_limit_bps == 0 || arg_rate_limit_bps > UINT32_MAX)
-                                return log_error_errno(EINVAL, "Rate limit size cannot be zero or is out of range.");
+                                return log_error_errno(-EINVAL, "Rate limit size cannot be zero or is out of range.");
 
                         break;
 
