@@ -46,7 +46,7 @@ typedef struct CaChunk {
 
 static CaChunk *ca_chunk_new(void);
 static CaChunk *ca_chunk_free(CaChunk *c);
-static int ca_chunk_acquire_file(CaChunk *c, CURLM *curlm, const char *url, CaChunkID *id);
+static int ca_chunk_acquire_file(CaChunk *c, CURLM *curlm, const char *url);
 static int ca_chunk_acquire_file_process(CaChunk *c, CURLM *curlm); /* TODO: find a better name */
 
 typedef struct CaProcess {
@@ -583,7 +583,7 @@ static const char *ca_chunk_get_url(CaChunk *c) {
         return url;
 }
 
-static int ca_chunk_acquire_file(CaChunk *c, CURLM *curlm, const char *url, CaChunkID *id) {
+static int ca_chunk_acquire_file(CaChunk *c, CURLM *curlm, const char *url) {
         CURL *curl;
         int r = 0;
 
@@ -656,7 +656,6 @@ static int ca_chunk_acquire_file(CaChunk *c, CURLM *curlm, const char *url, CaCh
                 goto finish;
         }
 
-        memcpy(&c->id, id, sizeof(*id)); /* TODO: remove memcpy */
         log_debug("Acquiring %s...", url);
 
         if (curlm) {
@@ -874,7 +873,6 @@ static int run(int argc, char *argv[]) {
 
         for (;;) {
                 const char *store_url;
-                CaChunkID id;
 
                 if (quit) {
                         log_info("Got exit signal, quitting.");
@@ -893,11 +891,18 @@ static int run(int argc, char *argv[]) {
                 if (r < 0)
                         goto finish;
 
-                r = ca_remote_next_request(rr, &id);
+                c = ca_chunk_new();
+                if (!c) {
+                        r = log_oom();
+                        goto finish;
+                }
+
+                r = ca_remote_next_request(rr, &c->id);
                 if (r == -ENODATA)
                         continue;
                 if (r < 0) {
                         log_error_errno(r, "Failed to determine next chunk to get: %m");
+                        ca_chunk_free(c);
                         goto finish;
                 }
 
@@ -909,20 +914,14 @@ static int run(int argc, char *argv[]) {
                 /* current_store++; */
 
                 free(url_buffer);
-                url_buffer = chunk_url(store_url, &id);
+                url_buffer = chunk_url(store_url, &c->id);
                 if (!url_buffer) {
                         r = log_oom();
                         ca_chunk_free(c);
                         goto finish;
                 }
 
-                c = ca_chunk_new();
-                if (!c) {
-                        r = log_oom();
-                        goto finish;
-                }
-
-                r = ca_chunk_acquire_file(c, p->curlm, url_buffer, &id);
+                r = ca_chunk_acquire_file(c, p->curlm, url_buffer);
                 if (r < 0) {
                         ca_chunk_free(c);
                         goto finish;
