@@ -217,53 +217,39 @@ static int parse_chunk_sizes(const char *v, size_t *ret_min, size_t *ret_avg, si
                 char *j, *p;
 
                 j = strchr(k+1, ':');
-                if (!j) {
-                        log_error("--chunk-size= requires either a single average chunk size or a triplet of minimum, average and maximum chunk size.");
-                        return -EINVAL;
-                }
+                if (!j)
+                        return log_error_errno(EINVAL, "--chunk-size= requires either a single average chunk size or a triplet of minimum, average and maximum chunk size.");
 
                 p = strndupa(v, k - v);
                 r = parse_size(p, &a);
                 if (r < 0)
                         return log_error_errno(r, "Can't parse minimum chunk size: %s", v);
-                if (a < CA_CHUNK_SIZE_LIMIT_MIN) {
-                        log_error("Minimum chunk size must be >= %zu.", CA_CHUNK_SIZE_LIMIT_MIN);
-                        return -ERANGE;
-                }
+                if (a < CA_CHUNK_SIZE_LIMIT_MIN)
+                        return log_error_errno(ERANGE, "Minimum chunk size must be >= %zu.", CA_CHUNK_SIZE_LIMIT_MIN);
 
                 p = strndupa(k + 1, j - k - 1);
                 r = parse_size(p, &b);
                 if (r < 0)
                         return log_error_errno(r, "Can't parse average chunk size: %s", v);
-                if (b < a) {
-                        log_error("Average chunk size must be larger than minimum chunk size.");
-                        return -EINVAL;
-                }
+                if (b < a)
+                        return log_error_errno(EINVAL, "Average chunk size must be larger than minimum chunk size.");
 
                 r = parse_size(j + 1, &c);
                 if (r < 0)
                         return log_error_errno(r, "Can't parse maximum chunk size: %s", v);
-                if (c < b) {
-                        log_error("Average chunk size must be smaller than maximum chunk size.");
-                        return -EINVAL;
-                }
-                if (c > CA_CHUNK_SIZE_LIMIT_MAX) {
-                        log_error("Maximum chunk size must be <= %zu.", CA_CHUNK_SIZE_LIMIT_MAX);
-                        return -ERANGE;
-                }
+                if (c < b)
+                        return log_error_errno(EINVAL, "Average chunk size must be smaller than maximum chunk size.");
+                if (c > CA_CHUNK_SIZE_LIMIT_MAX)
+                        return log_error_errno(ERANGE, "Maximum chunk size must be <= %zu.", CA_CHUNK_SIZE_LIMIT_MAX);
         } else {
 
                 r = parse_size(v, &b);
                 if (r < 0)
                         return log_error_errno(r, "Can't parse average chunk size: %s", v);
-                if (b < CA_CHUNK_SIZE_LIMIT_MIN) {
-                        log_error("Average chunk size must be >= %zu.", CA_CHUNK_SIZE_LIMIT_MIN);
-                        return -ERANGE;
-                }
-                if (b > CA_CHUNK_SIZE_LIMIT_MAX) {
-                        log_error("Average chunk size must be <= %zu.", CA_CHUNK_SIZE_LIMIT_MAX);
-                        return -ERANGE;
-                }
+                if (b < CA_CHUNK_SIZE_LIMIT_MIN)
+                        return log_error_errno(ERANGE, "Average chunk size must be >= %zu.", CA_CHUNK_SIZE_LIMIT_MIN);
+                if (b > CA_CHUNK_SIZE_LIMIT_MAX)
+                        return log_error_errno(ERANGE, "Average chunk size must be <= %zu.", CA_CHUNK_SIZE_LIMIT_MAX);
 
                 a = 0;
                 c = 0;
@@ -294,10 +280,8 @@ static int parse_what_selector(const char *arg, enum arg_what *what) {
                        "blob-index\n"
                        "directory\n");
                 return 0;
-        } else {
-                log_error("Failed to parse --what= selector: %s", arg);
-                return -EINVAL;
-        }
+        } else
+                return log_error_errno(EINVAL, "Failed to parse --what= selector: %s", arg);
 
         return 1;
 }
@@ -485,10 +469,8 @@ static int parse_argv(int argc, char *argv[]) {
 
                 case ARG_MAX_HOST_CONNECTIONS:
                         r = safe_atou(optarg, &arg_max_host_connections);
-                        if (r < 0) {
-                                log_error("Failed to parse --max-host-connections= value %s", optarg);
-                                return -EINVAL;
-                        }
+                        if (r < 0)
+                                return log_error_errno(EINVAL, "Failed to parse --max-host-connections= value %s", optarg);
                         break;
 
                 case ARG_SSL_TRUST_PEER:
@@ -1173,7 +1155,7 @@ static int process_step_generic(CaSync *s, int step, bool quit_ok) {
                         if (!quit_ok)
                                 log_error("Got exit signal, quitting.");
                 } else if (r < 0)
-                        log_error_errno(r, "Failed to poll synchronizer: %m");
+                        return log_error_errno(r, "Failed to poll synchronizer: %m");
 
                 return r;
 
@@ -1200,10 +1182,8 @@ static int verb_make(int argc, char *argv[]) {
         _cleanup_(ca_sync_unrefp) CaSync *s = NULL;
         struct stat st;
 
-        if (argc > 3) {
-                log_error("A pair of output and input path/URL expected.");
-                return -EINVAL;
-        }
+        if (argc > 3)
+                return log_error_errno(EINVAL, "A pair of output and input path/URL expected.");
 
         if (argc > 1) {
                 output = ca_strip_file_url(argv[1]);
@@ -1223,10 +1203,8 @@ static int verb_make(int argc, char *argv[]) {
                 operation = MAKE_ARCHIVE_INDEX;
         else if (arg_what == WHAT_BLOB_INDEX)
                 operation = MAKE_BLOB_INDEX;
-        else if (arg_what != _WHAT_INVALID) {
-                log_error("\"make\" operation may only be combined with --what=archive, --what=archive-index or --what=blob-index.");
-                return -EINVAL;
-        }
+        else if (arg_what != _WHAT_INVALID)
+                return log_error_errno(EINVAL, "\"make\" operation may only be combined with --what=archive, --what=archive-index or --what=blob-index.");
 
         if (operation == _MAKE_OPERATION_INVALID && output && !streq(output, "-")) {
                 if (ca_locator_has_suffix(output, ".catar"))
@@ -1235,10 +1213,8 @@ static int verb_make(int argc, char *argv[]) {
                         operation = MAKE_ARCHIVE_INDEX;
                 else if (ca_locator_has_suffix(output, ".caibx"))
                         operation = MAKE_BLOB_INDEX;
-                else {
-                        log_error("File to create does not have valid suffix, refusing. (May be one of: .catar, .caidx, .caibx)");
-                        return -EINVAL;
-                }
+                else
+                        return log_error_errno(EINVAL, "File to create does not have valid suffix, refusing. (May be one of: .catar, .caidx, .caibx)");
         }
 
         if (!input && IN_SET(operation, MAKE_ARCHIVE, MAKE_ARCHIVE_INDEX)) {
@@ -1254,15 +1230,11 @@ static int verb_make(int argc, char *argv[]) {
                 CaLocatorClass input_class;
 
                 input_class = ca_classify_locator(input);
-                if (input_class < 0) {
-                        log_error("Failed to determine class of locator: %s", input);
-                        return -EINVAL;
-                }
+                if (input_class < 0)
+                        return log_error_errno(EINVAL, "Failed to determine class of locator: %s", input);
 
-                if (input_class != CA_LOCATOR_PATH) {
-                        log_error("Input must be local path: %s", input);
-                        return -EINVAL;
-                }
+                if (input_class != CA_LOCATOR_PATH)
+                        return log_error_errno(EINVAL, "Input must be local path: %s", input);
 
                 input_fd = open(input, O_CLOEXEC|O_RDONLY|O_NOCTTY);
                 if (input_fd < 0)
@@ -1276,36 +1248,26 @@ static int verb_make(int argc, char *argv[]) {
 
                 if (operation == _MAKE_OPERATION_INVALID)
                         operation = MAKE_ARCHIVE;
-                else if (!IN_SET(operation, MAKE_ARCHIVE, MAKE_ARCHIVE_INDEX)) {
-                        log_error("Input is a directory, but attempted to make blob index. Refusing.");
-                        return -EINVAL;
-                }
+                else if (!IN_SET(operation, MAKE_ARCHIVE, MAKE_ARCHIVE_INDEX))
+                        return log_error_errno(EINVAL, "Input is a directory, but attempted to make blob index. Refusing.");
 
         } else if (S_ISREG(st.st_mode) || S_ISBLK(st.st_mode)) {
 
                 if (operation == _MAKE_OPERATION_INVALID)
                         operation = MAKE_BLOB_INDEX;
-                else if (operation != MAKE_BLOB_INDEX) {
-                        log_error("Input is a regular file or block device, but attempted to make a directory archive. Refusing.");
-                        return -EINVAL;
-                }
-        } else {
-                log_error("Input is a neither a directory, a regular file, nor a block device. Refusing.");
-                return -EINVAL;
-        }
+                else if (operation != MAKE_BLOB_INDEX)
+                        return log_error_errno(EINVAL, "Input is a regular file or block device, but attempted to make a directory archive. Refusing.");
+        } else
+                return log_error_errno(EINVAL, "Input is a neither a directory, a regular file, nor a block device. Refusing.");
 
         if (streq_ptr(output, "-"))
                 output = mfree(output);
 
-        if (operation == _MAKE_OPERATION_INVALID) {
-                log_error("Failed to determine what to make. Use --what=archive, --what=archive-index or --what=blob-index.");
-                return -EINVAL;
-        }
+        if (operation == _MAKE_OPERATION_INVALID)
+                return log_error_errno(EINVAL, "Failed to determine what to make. Use --what=archive, --what=archive-index or --what=blob-index.");
 
-        if (!IN_SET(operation, MAKE_ARCHIVE_INDEX, MAKE_ARCHIVE) && (arg_cache_auto || arg_cache)) {
-                log_error("Caching only supported when archiving files trees.");
-                return -EOPNOTSUPP;
-        }
+        if (!IN_SET(operation, MAKE_ARCHIVE_INDEX, MAKE_ARCHIVE) && (arg_cache_auto || arg_cache))
+                return log_error_errno(EOPNOTSUPP, "Caching only supported when archiving files trees.");
 
         if (IN_SET(operation, MAKE_ARCHIVE_INDEX, MAKE_BLOB_INDEX)) {
                 r = set_default_store(output);
@@ -1383,10 +1345,8 @@ static int verb_make(int argc, char *argv[]) {
                 return r;
 
         if (arg_cache_auto && !arg_cache) {
-                if (!input) {
-                        log_error("Can't automatically derive cache path if no input path is given.");
-                        return -EOPNOTSUPP;
-                }
+                if (!input)
+                        log_error_errno(EOPNOTSUPP, "Can't automatically derive cache path if no input path is given.");
 
                 arg_cache = strjoin(input, "/.cacac");
                 if (!arg_cache)
@@ -1406,10 +1366,8 @@ static int verb_make(int argc, char *argv[]) {
         (void) send_notify("READY=1");
 
         for (;;) {
-                if (quit) {
-                        log_info("Got exit signal, quitting.");
-                        return -ESHUTDOWN;
-                }
+                if (quit)
+                        return log_info_errno(ESHUTDOWN, "Got exit signal, quitting.");
 
                 r = ca_sync_step(s);
                 if (r < 0)
@@ -1502,10 +1460,8 @@ static int verb_extract(int argc, char *argv[]) {
         const char *seek_path = NULL;
         _cleanup_(ca_sync_unrefp) CaSync *s = NULL;
 
-        if (argc > 4) {
-                log_error("Input path/URL, output path, and subtree path expected.");
-                return -EINVAL;
-        }
+        if (argc > 4)
+                return log_error_errno(EINVAL, "Input path/URL, output path, and subtree path expected.");
 
         if (argc > 1) {
                 input = ca_strip_file_url(argv[1]);
@@ -1528,10 +1484,8 @@ static int verb_extract(int argc, char *argv[]) {
                 operation = EXTRACT_ARCHIVE_INDEX;
         else if (arg_what == WHAT_BLOB_INDEX)
                 operation = EXTRACT_BLOB_INDEX;
-        else if (arg_what != _WHAT_INVALID) {
-                log_error("\"extract\" operation may only be combined with --what=archive, --what=archive-index, --what=blob-index.");
-                return -EINVAL;
-        }
+        else if (arg_what != _WHAT_INVALID)
+                return log_error_errno(EINVAL, "\"extract\" operation may only be combined with --what=archive, --what=archive-index, --what=blob-index.");
 
         if (operation == _EXTRACT_OPERATION_INVALID && input && !streq(input, "-")) {
 
@@ -1541,10 +1495,8 @@ static int verb_extract(int argc, char *argv[]) {
                         operation = EXTRACT_ARCHIVE_INDEX;
                 else if (ca_locator_has_suffix(input, ".caibx"))
                         operation = EXTRACT_BLOB_INDEX;
-                else {
-                        log_error("File to read from does not have valid suffix, refusing. (May be one of: .catar, .caidx, .caibx)");
-                        return -EINVAL;
-                }
+                else
+                        return log_error_errno(EINVAL, "File to read from does not have valid suffix, refusing. (May be one of: .catar, .caidx, .caibx)");
         }
 
         if (!input || streq(input, "-"))
@@ -1563,15 +1515,11 @@ static int verb_extract(int argc, char *argv[]) {
                 CaLocatorClass output_class;
 
                 output_class = ca_classify_locator(output);
-                if (output_class < 0) {
-                        log_error("Failed to determine locator class: %s", output);
-                        return -EINVAL;
-                }
+                if (output_class < 0)
+                        return log_error_errno(EINVAL, "Failed to determine locator class: %s", output);
 
-                if (output_class != CA_LOCATOR_PATH) {
-                        log_error("Output must be local path: %s", output);
-                        return -EINVAL;
-                }
+                if (output_class != CA_LOCATOR_PATH)
+                        return log_error_errno(EINVAL, "Output must be local path: %s", output);
 
                 output_fd = open(output, O_CLOEXEC|O_WRONLY|O_NOCTTY);
                 if (output_fd < 0 && errno == EISDIR)
@@ -1591,34 +1539,24 @@ static int verb_extract(int argc, char *argv[]) {
 
                         if (operation == _EXTRACT_OPERATION_INVALID)
                                 operation = EXTRACT_ARCHIVE_INDEX;
-                        else if (!IN_SET(operation, EXTRACT_ARCHIVE, EXTRACT_ARCHIVE_INDEX)) {
-                                log_error("Output is a directory, but attempted to extract blob index. Refusing.");
-                                return -EINVAL;
-                        }
+                        else if (!IN_SET(operation, EXTRACT_ARCHIVE, EXTRACT_ARCHIVE_INDEX))
+                                return log_error_errno(EINVAL, "Output is a directory, but attempted to extract blob index. Refusing.");
 
                 } else if (S_ISREG(st.st_mode) || S_ISBLK(st.st_mode)) {
 
                         if (operation == _EXTRACT_OPERATION_INVALID)
                                 operation = EXTRACT_BLOB_INDEX;
-                        else if (operation != EXTRACT_BLOB_INDEX) {
-                                log_error("Output is a regular file or block device, but attempted to extract an archive.");
-                                return -EINVAL;
-                        }
-                } else {
-                        log_error("Output is neither a directory, a regular file, nor a block device. Refusing.");
-                        return -EINVAL;
-                }
+                        else if (operation != EXTRACT_BLOB_INDEX)
+                                return log_error_errno(EINVAL, "Output is a regular file or block device, but attempted to extract an archive.");
+                } else
+                        return log_error_errno(EINVAL, "Output is neither a directory, a regular file, nor a block device. Refusing.");
         }
 
-        if (operation == _EXTRACT_OPERATION_INVALID) {
-                log_error("Couldn't figure out what to extract. Refusing. Use --what=archive, --what=archive-index or --what=blob-index.");
-                return -EINVAL;
-        }
+        if (operation == _EXTRACT_OPERATION_INVALID)
+                return log_error_errno(EINVAL, "Couldn't figure out what to extract. Refusing. Use --what=archive, --what=archive-index or --what=blob-index.");
 
-        if (!IN_SET(operation, EXTRACT_ARCHIVE, EXTRACT_ARCHIVE_INDEX) && seek_path) {
-                log_error("Subtree path only supported when extracting archive or archive index.");
-                return -EINVAL;
-        }
+        if (!IN_SET(operation, EXTRACT_ARCHIVE, EXTRACT_ARCHIVE_INDEX) && seek_path)
+                return log_error_errno(EINVAL, "Subtree path only supported when extracting archive or archive index.");
 
         seek_path = normalize_seek_path(seek_path);
 
@@ -1736,10 +1674,8 @@ static int verb_extract(int argc, char *argv[]) {
         (void) send_notify("READY=1");
 
         for (;;) {
-                if (quit) {
-                        log_error("Got exit signal, quitting.");
-                        return -ESHUTDOWN;
-                }
+                if (quit)
+                        return log_error_errno(ESHUTDOWN, "Got exit signal, quitting.");
 
                 r = ca_sync_step(s);
                 if (r == -ENOMEDIUM)
@@ -2152,10 +2088,8 @@ static int verb_list(int argc, char *argv[]) {
         bool toplevel_shown = false;
         int r;
 
-        if (argc > 3) {
-                log_error("Input path/URL and subtree path expected.");
-                return -EINVAL;
-        }
+        if (argc > 3)
+                return log_error_errno(EINVAL, "Input path/URL and subtree path expected.");
 
         if (argc > 1) {
                 input = ca_strip_file_url(argv[1]);
@@ -2172,10 +2106,8 @@ static int verb_list(int argc, char *argv[]) {
                 operation = LIST_ARCHIVE_INDEX;
         else if (arg_what == WHAT_DIRECTORY)
                 operation = LIST_DIRECTORY;
-        else if (arg_what != _WHAT_INVALID) {
-                log_error("\"%s\" operation may only be combined with --what=archive, archive-index, or directory.", argv[0]);
-                return -EINVAL;
-        }
+        else if (arg_what != _WHAT_INVALID)
+                return log_error_errno(EINVAL, "\"%s\" operation may only be combined with --what=archive, archive-index, or directory.", argv[0]);
 
         if (operation == _LIST_OPERATION_INVALID && input && !streq(input, "-")) {
                 if (ca_locator_has_suffix(input, ".catar"))
@@ -2197,15 +2129,11 @@ static int verb_list(int argc, char *argv[]) {
                 CaLocatorClass input_class = _CA_LOCATOR_CLASS_INVALID;
 
                 input_class = ca_classify_locator(input);
-                if (input_class < 0) {
-                        log_error("Failed to determine type of locator: %s", input);
-                        return -EINVAL;
-                }
+                if (input_class < 0)
+                        return log_error_errno(EINVAL, "Failed to determine type of locator: %s", input);
 
-                if (operation == LIST_DIRECTORY && input_class != CA_LOCATOR_PATH) {
-                        log_error("Input must be local path: %s", input);
-                        return -EINVAL;
-                }
+                if (operation == LIST_DIRECTORY && input_class != CA_LOCATOR_PATH)
+                        return log_error_errno(EINVAL, "Input must be local path: %s", input);
 
                 if (input_class == CA_LOCATOR_PATH) {
                         input_fd = open(input, O_CLOEXEC|O_RDONLY|O_NOCTTY);
@@ -2223,10 +2151,8 @@ static int verb_list(int argc, char *argv[]) {
                 if (S_ISDIR(st.st_mode)) {
                         if (operation == _LIST_OPERATION_INVALID)
                                 operation = LIST_DIRECTORY;
-                        else if (operation != LIST_DIRECTORY) {
-                                log_error("Input is a directory, but attempted to list archive or index.");
-                                return -EINVAL;
-                        }
+                        else if (operation != LIST_DIRECTORY)
+                                return log_error_errno(EINVAL, "Input is a directory, but attempted to list archive or index.");
 
                 } else if (S_ISREG(st.st_mode)) {
 
@@ -2239,32 +2165,22 @@ static int verb_list(int argc, char *argv[]) {
                                  * example implying as source the path's parent directory, and then seek to the file
                                  * passed. For now, let's prohibit this, so that all options are open. */
 
-                                if (input) {
-                                        log_error("Input should be a directory, .catar or .caidx file. Refusing.");
-                                        return -EINVAL;
-                                }
+                                if (input)
+                                        return log_error_errno(EINVAL, "Input should be a directory, .catar or .caidx file. Refusing.");
 
                                 operation = LIST_ARCHIVE;
 
-                        } else if (!IN_SET(operation, LIST_ARCHIVE, LIST_ARCHIVE_INDEX)) {
-                                log_error("Input is a regular file, but attempted to list it as directory.");
-                                return -EINVAL;
-                        }
-                } else {
-                        log_error("Input is neither a file or directory. Refusing.");
-                        return -EINVAL;
-                }
+                        } else if (!IN_SET(operation, LIST_ARCHIVE, LIST_ARCHIVE_INDEX))
+                                return log_error_errno(EINVAL, "Input is a regular file, but attempted to list it as directory.");
+                } else
+                        return log_error_errno(EINVAL, "Input is neither a file or directory. Refusing.");
         }
 
-        if (operation == _LIST_OPERATION_INVALID) {
-                log_error("Failed to determine what to list. Use --what=archive, archive-index, or directory.");
-                return -EINVAL;
-        }
+        if (operation == _LIST_OPERATION_INVALID)
+                return log_error_errno(EINVAL, "Failed to determine what to list. Use --what=archive, archive-index, or directory.");
 
-        if (!IN_SET(operation, LIST_ARCHIVE, LIST_ARCHIVE_INDEX) && seek_path) {
-                log_error("Subtree path only supported when listing archive or archive index.");
-                return -EINVAL;
-        }
+        if (!IN_SET(operation, LIST_ARCHIVE, LIST_ARCHIVE_INDEX) && seek_path)
+                return log_error_errno(EINVAL, "Subtree path only supported when listing archive or archive index.");
 
         seek_path = normalize_seek_path(seek_path);
 
@@ -2350,10 +2266,8 @@ static int verb_list(int argc, char *argv[]) {
         (void) send_notify("READY=1");
 
         for (;;) {
-                if (quit) {
-                        log_info("Got exit signal, quitting.");
-                        return -ESHUTDOWN;
-                }
+                if (quit)
+                        return log_info_errno(ESHUTDOWN, "Got exit signal, quitting.");
 
                 r = ca_sync_step(s);
                 if (r == -ENOMEDIUM)
@@ -2390,10 +2304,8 @@ static int verb_list(int argc, char *argv[]) {
                                 char v[CA_CHUNK_ID_FORMAT_MAX];
 
                                 r = ca_sync_get_payload_digest(s, &digest);
-                                if (r < 0) {
-                                        log_error("Failed to read digest.");
-                                        return -EINVAL;
-                                }
+                                if (r < 0)
+                                        return log_error_errno(EINVAL, "Failed to read digest.");
 
                                 printf(" %s=%s\n", table[arg_digest], ca_chunk_id_format(&digest, v));
 
@@ -2463,10 +2375,8 @@ static int verb_digest(int argc, char *argv[]) {
         bool show_payload_digest = false;
         int seeking = false;
 
-        if (argc > 3) {
-                log_error("Input path/URL and subtree path expected.");
-                return -EINVAL;
-        }
+        if (argc > 3)
+                return log_error_errno(EINVAL, "Input path/URL and subtree path expected.");
 
         if (argc > 1) {
                 input = ca_strip_file_url(argv[1]);
@@ -2487,10 +2397,8 @@ static int verb_digest(int argc, char *argv[]) {
                 operation = DIGEST_BLOB_INDEX;
         else if (arg_what == WHAT_DIRECTORY)
                 operation = DIGEST_DIRECTORY;
-        else if (arg_what != _WHAT_INVALID) {
-                log_error("\"digest\" operation may only be combined with --what=archive, --what=blob, --what=archive-index, --what=blob-index or --what=directory.");
-                return -EINVAL;
-        }
+        else if (arg_what != _WHAT_INVALID)
+                return log_error_errno(EINVAL, "\"digest\" operation may only be combined with --what=archive, --what=blob, --what=archive-index, --what=blob-index or --what=directory.");
 
         if (operation == _DIGEST_OPERATION_INVALID && input && !streq(input, "-")) {
 
@@ -2514,15 +2422,11 @@ static int verb_digest(int argc, char *argv[]) {
                 CaLocatorClass input_class;
 
                 input_class = ca_classify_locator(input);
-                if (input_class < 0) {
-                        log_error("Failed to determine class of locator: %s", input);
-                        return -EINVAL;
-                }
+                if (input_class < 0)
+                        return log_error_errno(EINVAL, "Failed to determine class of locator: %s", input);
 
-                if (operation == DIGEST_DIRECTORY && input_class != CA_LOCATOR_PATH) {
-                        log_error("Input must be local path: %s", input);
-                        return -EINVAL;
-                }
+                if (operation == DIGEST_DIRECTORY && input_class != CA_LOCATOR_PATH)
+                        return log_error_errno(EINVAL, "Input must be local path: %s", input);
 
                 if (input_class == CA_LOCATOR_PATH) {
                         input_fd = open(input, O_CLOEXEC|O_RDONLY|O_NOCTTY);
@@ -2541,37 +2445,27 @@ static int verb_digest(int argc, char *argv[]) {
 
                         if (operation == _DIGEST_OPERATION_INVALID)
                                 operation = DIGEST_DIRECTORY;
-                        else if (operation != DIGEST_DIRECTORY) {
-                                log_error("Input is a directory, but attempted to list as blob. Refusing.");
-                                return -EINVAL;
-                        }
+                        else if (operation != DIGEST_DIRECTORY)
+                                return log_error_errno(EINVAL, "Input is a directory, but attempted to list as blob. Refusing.");
 
                 } else if (S_ISREG(st.st_mode) || S_ISBLK(st.st_mode)) {
 
                         if (operation == _DIGEST_OPERATION_INVALID)
                                 operation = seek_path ? DIGEST_ARCHIVE : DIGEST_BLOB;
-                        else if (!IN_SET(operation, DIGEST_ARCHIVE, DIGEST_BLOB, DIGEST_ARCHIVE_INDEX, DIGEST_BLOB_INDEX)) {
-                                log_error("Input is not a regular file or block device, but attempted to list as one. Refusing.");
-                                return -EINVAL;
-                        }
-                } else {
-                        log_error("Input is a neither a directory, a regular file, nor a block device. Refusing.");
-                        return -EINVAL;
-                }
+                        else if (!IN_SET(operation, DIGEST_ARCHIVE, DIGEST_BLOB, DIGEST_ARCHIVE_INDEX, DIGEST_BLOB_INDEX))
+                                return log_error_errno(EINVAL, "Input is not a regular file or block device, but attempted to list as one. Refusing.");
+                } else
+                        return log_error_errno(EINVAL, "Input is a neither a directory, a regular file, nor a block device. Refusing.");
         }
 
         if (streq_ptr(input, "-"))
                 input = mfree(input);
 
-        if (operation == _DIGEST_OPERATION_INVALID) {
-                log_error("Failed to determine what to calculate digest of. Use --what=archive, --what=blob, --what=archive-index, --what=blob-index or --what=directory.");
-                return -EINVAL;
-        }
+        if (operation == _DIGEST_OPERATION_INVALID)
+                return log_error_errno(EINVAL, "Failed to determine what to calculate digest of. Use --what=archive, --what=blob, --what=archive-index, --what=blob-index or --what=directory.");
 
-        if (!IN_SET(operation, DIGEST_ARCHIVE, DIGEST_ARCHIVE_INDEX) && seek_path) {
-                log_error("Subtree path only supported when calculating message digest of archive or archive index.");
-                return -EINVAL;
-        }
+        if (!IN_SET(operation, DIGEST_ARCHIVE, DIGEST_ARCHIVE_INDEX) && seek_path)
+                return log_error_errno(EINVAL, "Subtree path only supported when calculating message digest of archive or archive index.");
 
         seek_path = normalize_seek_path(seek_path);
 
@@ -2647,10 +2541,8 @@ static int verb_digest(int argc, char *argv[]) {
         (void) send_notify("READY=1");
 
         for (;;) {
-                if (quit) {
-                        log_error("Got exit signal, quitting.");
-                        return -ESHUTDOWN;
-                }
+                if (quit)
+                        return log_error_errno(ESHUTDOWN, "Got exit signal, quitting.");
 
                 r = ca_sync_step(s);
                 if (r == -ENOMEDIUM)
@@ -2698,10 +2590,8 @@ static int verb_digest(int argc, char *argv[]) {
 
                                 } else if (S_ISDIR(mode))
                                         show_payload_digest = false;
-                                else {
-                                        log_error("Path %s does not refer to a file or directory: %m", seek_path);
-                                        return -ENOTTY;
-                                }
+                                else
+                                        return log_error_errno(ENOTTY, "Path %s does not refer to a file or directory: %m", seek_path);
 
                                 seeking = false;
                         }
@@ -2767,10 +2657,8 @@ static int verb_mount(int argc, char *argv[]) {
         _cleanup_free_ char *input = NULL;
         _cleanup_(ca_sync_unrefp) CaSync *s = NULL;
 
-        if (argc > 3 || argc < 2) {
-                log_error("An archive path/URL expected, followed by a mount path.");
-                return -EINVAL;
-        }
+        if (argc > 3 || argc < 2)
+                return log_error_errno(EINVAL, "An archive path/URL expected, followed by a mount path.");
 
         if (argc > 2) {
                 input = ca_strip_file_url(argv[1]);
@@ -2785,10 +2673,8 @@ static int verb_mount(int argc, char *argv[]) {
                 operation = MOUNT_ARCHIVE;
         else if (arg_what == WHAT_ARCHIVE_INDEX)
                 operation = MOUNT_ARCHIVE_INDEX;
-        else if (arg_what != _WHAT_INVALID) {
-                log_error("\"mount\" operation may only be combined with --what=archive and --what=archive-index.");
-                return -EINVAL;
-        }
+        else if (arg_what != _WHAT_INVALID)
+                return log_error_errno(EINVAL, "\"mount\" operation may only be combined with --what=archive and --what=archive-index.");
 
         if (operation == _MOUNT_OPERATION_INVALID && input && !streq(input, "-")) {
                 if (ca_locator_has_suffix(input, ".caidx"))
@@ -2869,8 +2755,7 @@ static int verb_mount(int argc, char *argv[]) {
 
         return ca_fuse_run(s, input, mount_path, arg_mkdir);
 #else
-        log_error("Compiled without support for fuse.");
-        return -ENOSYS;
+        return log_error_errno(ENOSYS, "Compiled without support for fuse.");
 #endif
 }
 
@@ -2900,10 +2785,8 @@ static int verb_mkdev(int argc, char *argv[]) {
         _cleanup_(udev_unrefp) struct udev *udev = NULL;
 #endif
 
-        if (argc > 3) {
-                log_error("An blob path/URL expected, possibly followed by a device or symlink name.");
-                return -EINVAL;
-        }
+        if (argc > 3)
+                return log_error_errno(EINVAL, "An blob path/URL expected, possibly followed by a device or symlink name.");
 
         if (argc > 1) {
                 input = ca_strip_file_url(argv[1]);
@@ -3493,10 +3376,8 @@ static int verb_pull(int argc, char *argv[]) {
         _cleanup_(ca_remote_unrefp) CaRemote *rr = NULL;
         int r;
 
-        if (argc < 5) {
-                log_error("Expected at least 5 arguments.");
-                return -EINVAL;
-        }
+        if (argc < 5)
+                return log_error_errno(EINVAL, "Expected at least 5 arguments.");
 
         base_path = empty_or_dash_to_null(argv[1]);
         archive_path = empty_or_dash_to_null(argv[2]);
@@ -3505,15 +3386,11 @@ static int verb_pull(int argc, char *argv[]) {
 
         stores.n_stores = !!wstore_path + (argc - 5);
 
-        if (base_path) {
-                log_error("Pull from base or archive not yet supported.");
-                return -EOPNOTSUPP;
-        }
+        if (base_path)
+                return log_error_errno(EOPNOTSUPP, "Pull from base or archive not yet supported.");
 
-        if (!archive_path && !index_path && stores.n_stores == 0) {
-                log_error("Nothing to do.");
-                return -EINVAL;
-        }
+        if (!archive_path && !index_path && stores.n_stores == 0)
+                return log_error_errno(EINVAL, "Nothing to do.");
 
         /* fprintf(stderr, "pull archive: %s index: %s wstore: %s\n", strna(archive_path), strna(index_path), strna(wstore_path)); */
 
@@ -3577,10 +3454,8 @@ static int verb_pull(int argc, char *argv[]) {
                 sigset_t ss;
                 int step;
 
-                if (quit) {
-                        log_info("Got exit signal, quitting.");
-                        return -ESHUTDOWN;
-                }
+                if (quit)
+                        return log_info_errno(ESHUTDOWN, "Got exit signal, quitting.");
 
                 step = ca_remote_step(rr);
                 if (step == -EPIPE || step == CA_REMOTE_FINISHED) /* When somebody pulls from us, he's welcome to terminate any time he likes */
@@ -3664,10 +3539,8 @@ static int verb_push(int argc, char *argv[]) {
         _cleanup_(free_storesp) CaStoresCleanup stores = {};
         int r;
 
-        if (argc < 5) {
-                log_error("Expected at least 5 arguments.");
-                return -EINVAL;
-        }
+        if (argc < 5)
+                return log_error_errno(EINVAL, "Expected at least 5 arguments.");
 
         base_path = empty_or_dash_to_null(argv[1]);
         archive_path = empty_or_dash_to_null(argv[2]);
@@ -3676,15 +3549,11 @@ static int verb_push(int argc, char *argv[]) {
 
         stores.n_stores = !!wstore_path + (argc - 5);
 
-        if (base_path) {
-                log_error("Push to base not yet supported.");
-                return -EOPNOTSUPP;
-        }
+        if (base_path)
+                return log_error_errno(EOPNOTSUPP, "Push to base not yet supported.");
 
-        if (!archive_path && !index_path && stores.n_stores == 0) {
-                log_error("Nothing to do.");
-                return -EINVAL;
-        }
+        if (!archive_path && !index_path && stores.n_stores == 0)
+                return log_error_errno(EINVAL, "Nothing to do.");
 
         /* log_error("push archive: %s index: %s wstore: %s", strna(archive_path), strna(index_path), strna(wstore_path)); */
 
@@ -3755,10 +3624,8 @@ static int verb_push(int argc, char *argv[]) {
                 bool finished;
                 int step;
 
-                if (quit) {
-                        log_error("Got exit signal, quitting.");
-                        return -ESHUTDOWN;
-                }
+                if (quit)
+                        return log_error_errno(ESHUTDOWN, "Got exit signal, quitting.");
 
                 step = ca_remote_step(rr);
                 if (step < 0)
@@ -3949,16 +3816,12 @@ static int verb_udev(int argc, char *argv[]) {
         _cleanup_(safe_closep) int fd = -1;
         ssize_t n;
 
-        if (argc != 2) {
-                log_error("Expected one argument.");
-                return -EINVAL;
-        }
+        if (argc != 2)
+                return log_error_errno(EINVAL, "Expected one argument.");
 
         e = path_startswith(argv[1], "/dev");
-        if (!e || !filename_is_valid(e)) {
-                log_error("Argument is not a valid device node path: %s.", argv[2]);
-                return -EINVAL;
-        }
+        if (!e || !filename_is_valid(e))
+                return log_error_errno(EINVAL, "Argument is not a valid device node path: %s.", argv[2]);
 
         p = strjoina("/run/casync/", e);
         fd = open(p, O_RDONLY|O_CLOEXEC|O_NOCTTY);
@@ -3985,20 +3848,14 @@ static int verb_udev(int argc, char *argv[]) {
         n = read(fd, pretty, sizeof(pretty));
         if (n < 0)
                 return log_error_errno(errno, "Failed to read from %s: %m", p);
-        if ((size_t) n >= sizeof(pretty)) {
-                log_error("Stored name read from %s too long.", p);
-                return -EINVAL;
-        }
-        if ((size_t) n <= 0 || pretty[n-1] != '\n') {
-                log_error("Stored name not newline terminated.");
-                return -EINVAL;
-        }
+        if ((size_t) n >= sizeof(pretty))
+                return log_error_errno(EINVAL, "Stored name read from %s too long.", p);
+        if ((size_t) n <= 0 || pretty[n-1] != '\n')
+                return log_error_errno(EINVAL, "Stored name not newline terminated.");
 
         pretty[n-1] = 0;
-        if (!filename_is_valid(pretty)) {
-                log_error("Stored name is invalid: %s", pretty);
-                return -EINVAL;
-        }
+        if (!filename_is_valid(pretty))
+                return log_error_errno(EINVAL, "Stored name is invalid: %s", pretty);
 
         printf("CASYNC_NAME=%s\n", pretty);
         return 0;
@@ -4009,10 +3866,8 @@ static int verb_gc(int argc, char *argv[]) {
         _cleanup_(ca_chunk_collection_unrefp) CaChunkCollection *coll = NULL;
         _cleanup_(ca_store_unrefp) CaStore *store = NULL;
 
-        if (argc < 2) {
-                log_error("Expected at least one argument.");
-                return -EINVAL;
-        }
+        if (argc < 2)
+                return log_error_errno(EINVAL, "Expected at least one argument.");
 
         coll = ca_chunk_collection_new();
         if (!coll)
@@ -4023,20 +3878,16 @@ static int verb_gc(int argc, char *argv[]) {
         if (r < 0)
                 return r;
 
-        if (!arg_store) {
-                log_error("Failed to determine store, use --store= to set store.");
-                return -EINVAL;
-        }
+        if (!arg_store)
+                return log_error_errno(EINVAL, "Failed to determine store, use --store= to set store.");
 
         store = ca_store_new();
         if (!store)
                 return log_oom();
 
         r = ca_store_set_path(store, arg_store);
-        if (r < 0) {
-                fprintf(stderr, "Set to set store to \"%s\": %s", arg_store, strerror(-r));
-                return r;
-        }
+        if (r < 0)
+                return log_error_errno(r, "Failed to set store to \"%s\": %s", arg_store, strerror(-r));
 
         for (i = 1; i < argc; i++) {
                 const char *path = argv[i];
@@ -4059,7 +3910,7 @@ static int verb_gc(int argc, char *argv[]) {
                                  arg_verbose * CA_GC_VERBOSE |
                                  arg_dry_run * CA_GC_DRY_RUN);
         if (r < 0)
-                log_error_errno(r, "Chunk cleanup failed: %m");
+                return log_error_errno(r, "Chunk cleanup failed: %m");
 
         return r;
 }
@@ -4068,10 +3919,8 @@ static int verb_gc(int argc, char *argv[]) {
 static int dispatch_verb(int argc, char *argv[]) {
         int r;
 
-        if (argc < 1) {
-                log_error("Missing verb. (Invoke '%s --help' for a list of available verbs.)", program_invocation_short_name);
-                return -EINVAL;
-        }
+        if (argc < 1)
+                return log_error_errno(EINVAL, "Missing verb. (Invoke '%s --help' for a list of available verbs.)", program_invocation_short_name);
 
         if (streq(argv[0], "help")) {
                 help();
@@ -4096,10 +3945,8 @@ static int dispatch_verb(int argc, char *argv[]) {
                 r = verb_udev(argc, argv);
         else if (streq(argv[0], "gc"))
                 r = verb_gc(argc, argv);
-        else {
-                log_error("Unknown verb '%s'. (Invoke '%s --help' for a list of available verbs.)", argv[0], program_invocation_short_name);
-                r = -EINVAL;
-        }
+        else
+                return log_error_errno(EINVAL, "Unknown verb '%s'. (Invoke '%s --help' for a list of available verbs.)", argv[0], program_invocation_short_name);
 
         return r;
 }
