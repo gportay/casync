@@ -135,7 +135,7 @@ static int process_remote(CaRemote *rr, ProcessUntil until) {
                                 return r;
                         if (r < 0)
                                 return log_error_errno(r, "Failed to determine whether there's more data to write.");
-                        if (r > 0)
+                        if (r == 0)
                                 return 0;
 
                         break;
@@ -493,12 +493,14 @@ static int run(int argc, char *argv[]) {
                         goto finish;
         }
 
+	static size_t n_chunks = 0;
         for (;;) {
                 const char *store_url;
                 CaChunkID id;
 
                 if (quit) {
                         log_info("Got exit signal, quitting.");
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         r = 0;
                         goto finish;
                 }
@@ -508,17 +510,22 @@ static int run(int argc, char *argv[]) {
 
                 r = process_remote(rr, PROCESS_UNTIL_HAVE_REQUEST);
                 if (r == -EPIPE) {
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         r = 0;
                         goto finish;
                 }
                 if (r < 0)
+		{
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
+		}
 
                 r = ca_remote_next_request(rr, &id);
                 if (r == -ENODATA)
                         continue;
                 if (r < 0) {
                         log_error_errno(r, "Failed to determine next chunk to get: %m");
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
                 }
 
@@ -533,24 +540,28 @@ static int run(int argc, char *argv[]) {
                 url_buffer = chunk_url(store_url, &id);
                 if (!url_buffer) {
                         r = log_oom();
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
                 }
 
                 if (curl_easy_setopt(curl, CURLOPT_URL, url_buffer) != CURLE_OK) {
                         log_error("Failed to set CURL URL to: %s", index_url);
                         r = -EIO;
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
                 }
 
                 if (curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_chunk) != CURLE_OK) {
                         log_error("Failed to set CURL callback function.");
                         r = -EIO;
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
                 }
 
                 if (curl_easy_setopt(curl, CURLOPT_WRITEDATA, &chunk_buffer) != CURLE_OK) {
                         log_error("Failed to set CURL private data.");
                         r = -EIO;
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
                 }
 
@@ -558,45 +569,59 @@ static int run(int argc, char *argv[]) {
                         if (curl_easy_setopt(curl, CURLOPT_MAX_SEND_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
                                 log_error("Failed to set CURL send speed limit.");
                                 r = -EIO;
+				fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                                 goto finish;
                         }
 
                         if (curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, arg_rate_limit_bps) != CURLE_OK) {
                                 log_error("Failed to set CURL receive speed limit.");
                                 r = -EIO;
+				fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                                 goto finish;
                         }
                 }
 
-                log_debug("Acquiring %s...", url_buffer);
+		n_chunks++;
+                log_debug("Acquiring %s/%lu (#%lu)...", url_buffer, realloc_buffer_size(&chunk_buffer), n_chunks);
 
                 CURLcode c = robust_curl_easy_perform(curl);
                 if (c != CURLE_OK) {
-                        log_error("Failed to acquire %s: %s", url_buffer, curl_easy_strerror(c));
+                        log_error("Failed to acquire %s/%lu: %s", url_buffer, n_chunks, curl_easy_strerror(c));
                         r = -EIO;
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
                 }
 
                 if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &protocol_status) != CURLE_OK) {
                         log_error("Failed to query response code");
                         r = -EIO;
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
                 }
 
+                log_debug("Acquired %s/%lu (#%lu)!", url_buffer, realloc_buffer_size(&chunk_buffer), n_chunks);
+
                 r = process_remote(rr, PROCESS_UNTIL_CAN_PUT_CHUNK);
                 if (r == -EPIPE) {
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         r = 0;
                         goto finish;
                 }
                 if (r < 0)
+		{
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
+		}
 
                 if ((IN_SET(arg_protocol, ARG_PROTOCOL_HTTP, ARG_PROTOCOL_HTTPS) && protocol_status == 200) ||
                     (arg_protocol == ARG_PROTOCOL_FTP && (protocol_status >= 200 && protocol_status <= 299))||
                     (arg_protocol == ARG_PROTOCOL_SFTP && (protocol_status == 0))) {
 
+			fprintf(stderr, "%s@%u [%-4s] === chunk_buffer: %lu\n", __func__, __LINE__, "HTTP", realloc_buffer_size(&chunk_buffer)); 
+			REALLOC_BUFFER_HEXDUMP(stderr, &chunk_buffer, REALLOC_BUFFER_HEXDUMP_SIZE);
                         r = ca_remote_put_chunk(rr, &id, CA_CHUNK_COMPRESSED, realloc_buffer_data(&chunk_buffer), realloc_buffer_size(&chunk_buffer));
                         if (r < 0) {
+				fprintf(stderr, "%s@%i r: %i, realloc_buffer_size: %lu\n", __func__, __LINE__, r, realloc_buffer_size(&chunk_buffer));
                                 log_error_errno(r, "Failed to write chunk: %m");
                                 goto finish;
                         }
@@ -607,6 +632,7 @@ static int run(int argc, char *argv[]) {
 
                         r = ca_remote_put_missing(rr, &id);
                         if (r < 0) {
+				fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                                 log_error_errno(r, "Failed to write missing message: %m");
                                 goto finish;
                         }
@@ -616,20 +642,27 @@ static int run(int argc, char *argv[]) {
 
                 r = process_remote(rr, PROCESS_UNTIL_WRITTEN);
                 if (r == -EPIPE) {
+				fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         r = 0;
                         goto finish;
                 }
                 if (r < 0)
+		{
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
+		}
         }
 
 flush:
+	fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
         r = process_remote(rr, PROCESS_UNTIL_FINISHED);
+	fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
 
 finish:
         if (curl)
                 curl_easy_cleanup(curl);
 
+	fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
         return r;
 }
 

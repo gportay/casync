@@ -25,7 +25,7 @@ void* realloc_buffer_acquire(ReallocBuffer *b, size_t size) {
                  * non-NULL, but also not actually allocate any memory. Hence return a pointer to the ReallocBuffer
                  * object itself, as that's a known valid pointer. */
 
-                return b->data ?: b;
+                return b->data ?: b; /* What??? */
         }
         if (_unlikely_(size > REALLOC_BUFFER_MAX))
                 return NULL;

@@ -24,6 +24,19 @@
 #include "gcc-macro.h"
 #include "log.h"
 
+#define HAVE_REALLOC_BUFFER 1
+
+#if defined(HAVE_REALLOC_BUFFER)
+#define REALLOC_BUFFER_HEXDUMP_SIZE 5*16
+#define REALLOC_BUFFER_HEXDUMP(f, b, s) \
+	do { \
+		hexdump(f, realloc_buffer_data(b), realloc_buffer_size(b) < s ? realloc_buffer_size(b) : s); \
+		fflush(f); \
+	} while (0)
+#else
+#define REALLOC_BUFFER_HEXDUMP(...)
+#endif
+
 #define new(t, n) ((t*) malloc((n) * sizeof(t)))
 #define new0(t, n) ((t*) calloc((n), sizeof(t)))
 

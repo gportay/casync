@@ -156,6 +156,9 @@ struct CaSync {
 
 #define CA_SYNC_IS_STARTED(s) ((s)->start_nsec != 0)
 
+/* TODO */
+static int ca_sync_get_local(CaSync *s, const CaChunkID *chunk_id, CaChunkCompression desired_compression, const void **ret, uint64_t *ret_size, CaChunkCompression *ret_effective_compression, CaOrigin **ret_origin);
+
 static CaSync *ca_sync_new(void) {
         CaSync *s;
 
@@ -3219,7 +3222,7 @@ int ca_sync_step(CaSync *s) {
         return ca_sync_step_encode(s);
 }
 
-int ca_sync_get_local(
+static int ca_sync_get_local(
                 CaSync *s,
                 const CaChunkID *chunk_id,
                 CaChunkCompression desired_compression,
@@ -3344,7 +3347,11 @@ int ca_sync_get(CaSync *s,
 
         r = ca_sync_get_local(s, chunk_id, desired_compression, ret, ret_size, ret_effective_compression, ret_origin);
         if (r != -ENOENT)
+	{
+		if (r != 0)
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                 return r;
+	}
 
         if (s->remote_wstore) {
                 r = ca_remote_request(s->remote_wstore, chunk_id, true, desired_compression, ret, ret_size, ret_effective_compression);
@@ -3354,7 +3361,11 @@ int ca_sync_get(CaSync *s,
                         return r;
                 }
                 if (r != -ENOENT)
+		{
+			if (r != -EAGAIN && r != -EALREADY)
+				fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         return r;
+		}
         }
 
         for (i = 0; i < s->n_remote_rstores; i++) {
@@ -3365,9 +3376,14 @@ int ca_sync_get(CaSync *s,
                         return r;
                 }
                 if (r != -ENOENT)
+		{
+			if (r != -EAGAIN && r != -EALREADY)
+				fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         return r;
+		}
         }
 
+	fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
         return -ENOENT;
 }
 

@@ -472,7 +472,10 @@ int ca_seed_step(CaSeed *s) {
                 return -EINVAL;
 
         if (s->ready)
+	{
+		fprintf(stderr, "%s@%i s->ready: %i\n", __func__, __LINE__, s->ready);
                 return -EALREADY;
+	}
 
         if (!s->cache_chunks && !s->cache_hardlink) {
                 if (s->last_step_nsec == 0)
@@ -819,7 +822,10 @@ int ca_seed_current_path(CaSeed *seed, char **ret) {
                 return -EINVAL;
 
         if (seed->ready)
+	{
+		fprintf(stderr, "%s@%i seed->ready: %i\n", __func__, __LINE__, seed->ready);
                 return -EALREADY;
+	}
 
         return ca_encoder_current_path(seed->encoder, ret);
 }
@@ -831,7 +837,10 @@ int ca_seed_current_mode(CaSeed *seed, mode_t *ret) {
                 return -EINVAL;
 
         if (seed->ready)
+	{
+		fprintf(stderr, "%s@%i seed->ready: %i\n", __func__, __LINE__, seed->ready);
                 return -EALREADY;
+	}
 
         return ca_encoder_current_mode(seed->encoder, ret);
 }

@@ -26,13 +26,17 @@ int ca_load_fd(int fd, ReallocBuffer *buffer) {
 
                 /* Don't permit loading chunks larger than the chunk limit */
                 if (count >= CA_CHUNK_SIZE_LIMIT_MAX)
+		{
+			fprintf(stderr, "%s@%u count: %lu > %lu, return -EBADMSG\n", __func__, __LINE__, count, CA_CHUNK_SIZE_LIMIT_MAX);
                         return -EBADMSG;
+		}
 
                 p = realloc_buffer_extend(buffer, BUFFER_SIZE);
                 if (!p)
                         return -ENOMEM;
 
                 l = read(fd, p, BUFFER_SIZE);
+		//fprintf(stderr, "%s@%u fd: %i, BUFSIZE: %u: l: %li\n", __func__, __LINE__, fd, BUFFER_SIZE, l);
                 if (l < 0)
                         return -errno;
 
@@ -45,7 +49,10 @@ int ca_load_fd(int fd, ReallocBuffer *buffer) {
 
         /* Don't permit empty chunks */
         if (count < CA_CHUNK_SIZE_LIMIT_MIN)
+	{
+		fprintf(stderr, "%s@%u count: %lu > %lu, return -EBADMSG\n", __func__, __LINE__, count, CA_CHUNK_SIZE_LIMIT_MAX);
                 return -EBADMSG;
+	}
 
         return 0;
 }
@@ -69,6 +76,7 @@ int ca_load_and_decompress_fd(int fd, ReallocBuffer *buffer) {
                 assert(ccount < BUFFER_SIZE);
 
                 l = read(fd, fd_buffer + ccount, sizeof(fd_buffer) - ccount);
+		//fprintf(stderr, "%s@%u fd: %i, sizeof(fd_buffer) - ccount: %lu: l: %li\n", __func__, __LINE__, fd, sizeof(fd_buffer) - ccount, l);
                 if (l < 0)
                         return -errno;
                 if (l == 0)
@@ -118,6 +126,7 @@ int ca_load_and_decompress_fd(int fd, ReallocBuffer *buffer) {
                 };
 
                 l = read(fd, fd_buffer, sizeof(fd_buffer));
+		//fprintf(stderr, "%s@%u fd: %i, sizeof(fd_buffer): %lu, l: %li\n", __func__, __LINE__, fd, sizeof(fd_buffer), l);
                 if (l < 0)
                         return -errno;
                 if (l == 0) {
@@ -165,6 +174,7 @@ int ca_load_and_compress_fd(int fd, CaCompressionType compression_type, ReallocB
                 bool eof, got_encoder_eof = false;
 
                 l = read(fd, fd_buffer, sizeof(fd_buffer));
+		//fprintf(stderr, "%s@%u fd: %i, sizeof(fd_buffer): %lu, l: %li\n", __func__, __LINE__, fd, sizeof(fd_buffer), l);
                 if (l < 0)
                         return -errno;
 
@@ -222,7 +232,15 @@ int ca_save_fd(int fd, const void *data, size_t size) {
         if (!data)
                 return -EINVAL;
 
+#if 0
+	int ret;
+	fprintf(stderr, "%s@%u fd: %i, size: %lu\n", __func__, __LINE__, fd, size);
+        ret = loop_write(fd, data, size);
+	fprintf(stderr, "%s@%u fd: %i, size: %lu, return %i\n", __func__, __LINE__, fd, size, ret);
+	return ret;
+#else
         return loop_write(fd, data, size);
+#endif
 }
 
 int ca_save_and_compress_fd(int fd, CaCompressionType compression_type, const void *data, size_t size) {
@@ -261,6 +279,7 @@ int ca_save_and_compress_fd(int fd, CaCompressionType compression_type, const vo
                         return r;
 
                 k = loop_write(fd, buffer, done);
+		fprintf(stderr, "%s@%u fd: %i, done: %lu, k: %i\n", __func__, __LINE__, fd, done, k);
                 if (k < 0)
                         return k;
 

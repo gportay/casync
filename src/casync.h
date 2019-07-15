@@ -113,7 +113,6 @@ int ca_sync_current_quota_projid(CaSync *s, uint32_t *ret);
 int ca_sync_get_archive_size(CaSync *s, uint64_t *ret);
 
 /* Low level chunk access */
-int ca_sync_get_local(CaSync *s, const CaChunkID *chunk_id, CaChunkCompression desired_compression, const void **ret, uint64_t *ret_size, CaChunkCompression *ret_effective_compression, CaOrigin **ret_origin);
 int ca_sync_get(CaSync *s, const CaChunkID *chunk_id, CaChunkCompression desired_compression, const void **ret, uint64_t *ret_size, CaChunkCompression *ret_effective_compression, CaOrigin **ret_origin);
 int ca_sync_has_local(CaSync *s, const CaChunkID *chunk_id);
 

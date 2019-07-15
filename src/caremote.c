@@ -228,6 +228,7 @@ CaRemote* ca_remote_unref(CaRemote *rr) {
         return mfree(rr);
 }
 
+/* casync, tool/pull+push */
 int ca_remote_set_rate_limit_bps(CaRemote *rr, uint64_t rate_limit_bps) {
         if (!rr)
                 return -EINVAL;
@@ -237,6 +238,7 @@ int ca_remote_set_rate_limit_bps(CaRemote *rr, uint64_t rate_limit_bps) {
         return 0;
 }
 
+/* casync, tool/pull+push */
 int ca_remote_set_local_feature_flags(CaRemote *rr, uint64_t flags) {
         if (!rr)
                 return -EINVAL;
@@ -257,6 +259,7 @@ int ca_remote_set_local_feature_flags(CaRemote *rr, uint64_t flags) {
         return 0;
 }
 
+/* casync */
 int ca_remote_add_local_feature_flags(CaRemote *rr, uint64_t flags) {
         if (!rr)
                 return -EINVAL;
@@ -274,6 +277,7 @@ int ca_remote_add_local_feature_flags(CaRemote *rr, uint64_t flags) {
         return 0;
 }
 
+/* unused */
 int ca_remote_get_local_feature_flags(CaRemote *rr, uint64_t* flags) {
         if (!rr)
                 return -EINVAL;
@@ -287,6 +291,7 @@ int ca_remote_get_local_feature_flags(CaRemote *rr, uint64_t* flags) {
         return 0;
 }
 
+/* tool/push */
 int ca_remote_get_remote_feature_flags(CaRemote *rr, uint64_t* flags) {
         if (!rr)
                 return -EINVAL;
@@ -300,6 +305,7 @@ int ca_remote_get_remote_feature_flags(CaRemote *rr, uint64_t* flags) {
         return 0;
 }
 
+/* casync */
 int ca_remote_set_io_fds(CaRemote *rr, int input_fd, int output_fd) {
         if (!rr)
                 return -EINVAL;
@@ -319,6 +325,7 @@ int ca_remote_set_io_fds(CaRemote *rr, int input_fd, int output_fd) {
         return 0;
 }
 
+/* casync */
 int ca_remote_get_io_fds(CaRemote *rr, int *ret_input_fd, int *ret_output_fd) {
         if (!rr)
                 return -EINVAL;
@@ -336,6 +343,7 @@ int ca_remote_get_io_fds(CaRemote *rr, int *ret_input_fd, int *ret_output_fd) {
         return 0;
 }
 
+/* static */
 static size_t ca_remote_get_read_size(CaRemote *rr) {
         assert(rr);
 
@@ -346,6 +354,7 @@ static size_t ca_remote_get_read_size(CaRemote *rr) {
         return MAX(rr->frame_size, REMOTE_BUFFER_SIZE);
 }
 
+/* casync */
 int ca_remote_get_io_events(CaRemote *rr, short *ret_input_events, short *ret_output_events) {
 
         if (!rr)
@@ -368,6 +377,7 @@ int ca_remote_get_io_events(CaRemote *rr, short *ret_input_events, short *ret_ou
         return 0;
 }
 
+/* static */
 static int ca_remote_url_prefix_install(CaRemote *rr, const char *url) {
         const char *e;
         char *prefix;
@@ -423,6 +433,7 @@ static int ca_remote_url_prefix_install(CaRemote *rr, const char *url) {
         return 1;
 }
 
+/* static */
 static int ca_remote_ssh_prefix_install(CaRemote *rr, const char *url) {
         char *prefix;
         size_t n;
@@ -475,6 +486,7 @@ static int ca_remote_ssh_prefix_install(CaRemote *rr, const char *url) {
         return 0;
 }
 
+/* static */
 static int ca_remote_any_prefix_install(CaRemote *rr, const char *url) {
         int r;
 
@@ -487,6 +499,7 @@ static int ca_remote_any_prefix_install(CaRemote *rr, const char *url) {
         return ca_remote_ssh_prefix_install(rr, url);
 }
 
+/* casync */
 int ca_remote_set_index_url(CaRemote *rr, const char *url) {
         int r;
 
@@ -508,6 +521,7 @@ int ca_remote_set_index_url(CaRemote *rr, const char *url) {
         return 0;
 }
 
+/* casync */
 int ca_remote_set_archive_url(CaRemote *rr, const char *url) {
         int r;
 
@@ -529,6 +543,7 @@ int ca_remote_set_archive_url(CaRemote *rr, const char *url) {
         return 0;
 }
 
+/* casync/~wrapper */
 int ca_remote_set_store_url(CaRemote *rr, const char *url) {
         int r;
 
@@ -583,6 +598,7 @@ int ca_remote_set_cache_path(CaRemote *rr, const char *path) {
         return 0;
 }
 
+/* unused */
 int ca_remote_set_cache_fd(CaRemote *rr, int fd) {
         if (!rr)
                 return -EINVAL;
@@ -598,6 +614,7 @@ int ca_remote_set_cache_fd(CaRemote *rr, int fd) {
         return 0;
 }
 
+/* static */
 static int ca_remote_file_set_path(CaRemoteFile *f, const char *path) {
         assert(f);
         assert(path);
@@ -614,6 +631,7 @@ static int ca_remote_file_set_path(CaRemoteFile *f, const char *path) {
         return 0;
 }
 
+/* tool/pull */
 int ca_remote_set_index_path(CaRemote *rr, const char *path) {
         if (!rr)
                 return -EINVAL;
@@ -623,6 +641,7 @@ int ca_remote_set_index_path(CaRemote *rr, const char *path) {
         return ca_remote_file_set_path(&rr->index_file, path);
 }
 
+/* static */
 static int ca_remote_file_set_fd(CaRemoteFile *f, int fd) {
         assert(f);
         assert(fd >= 0);
@@ -636,6 +655,7 @@ static int ca_remote_file_set_fd(CaRemoteFile *f, int fd) {
         return 0;
 }
 
+/* unused */
 int ca_remote_set_index_fd(CaRemote *rr, int fd) {
         if (!rr)
                 return -EINVAL;
@@ -645,6 +665,7 @@ int ca_remote_set_index_fd(CaRemote *rr, int fd) {
         return ca_remote_file_set_fd(&rr->index_file, fd);
 }
 
+/* tool/pull+push */
 int ca_remote_set_archive_path(CaRemote *rr, const char *path) {
         if (!rr)
                 return -EINVAL;
@@ -654,6 +675,7 @@ int ca_remote_set_archive_path(CaRemote *rr, const char *path) {
         return ca_remote_file_set_path(&rr->archive_file, path);
 }
 
+/* unused */
 int ca_remote_set_archive_fd(CaRemote *rr, int fd) {
         if (!rr)
                 return -EINVAL;
@@ -663,6 +685,7 @@ int ca_remote_set_archive_fd(CaRemote *rr, int fd) {
         return ca_remote_file_set_fd(&rr->index_file, fd);
 }
 
+/* static */
 static int ca_remote_init_cache(CaRemote *rr) {
         int r;
 
@@ -693,6 +716,7 @@ static int ca_remote_init_cache(CaRemote *rr) {
         return 1;
 }
 
+/* static */
 static int ca_remote_enqueue_request(CaRemote *rr, const CaChunkID *id, bool high_priority, bool please_requeue) {
         char ids[CA_CHUNK_ID_FORMAT_MAX];
         uint64_t position;
@@ -705,7 +729,10 @@ static int ca_remote_enqueue_request(CaRemote *rr, const CaChunkID *id, bool hig
 
         r = ca_remote_init_cache(rr);
         if (r < 0)
+	{
+		fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                 return r;
+	}
 
         /* Enqueues a GET request. We maintain a 2-level priority queue on disk for this, in two directories
          * "low-priority" and "high-priority". This could be much easier if we could maintain this entirely in memory,
@@ -728,11 +755,17 @@ static int ca_remote_enqueue_request(CaRemote *rr, const CaChunkID *id, bool hig
         f = strjoina("chunks/", ids);
         r = readlinkat_malloc(rr->cache_fd, f, &qpos);
         if (r < 0 && r != -ENOENT)
+	{
+		fprintf(stderr, "%s@%i r: %i, f: %s\n", __func__, __LINE__, r, f);
                 return r;
+	}
 
         if (r >= 0) {
                 uint64_t old_position;
                 const char *p;
+
+		if (0)
+			fprintf(stderr, "%s@%i f: %s -> qpos: %s\n", __func__, __LINE__, f, qpos);
 
                 /* Already queued on the same priority? Then there's nothing to do. */
                 if (startswith(qpos, queue_name)) {
@@ -743,17 +776,22 @@ static int ca_remote_enqueue_request(CaRemote *rr, const CaChunkID *id, bool hig
                 /* Not matching, but the new priority is low? Then there's nothing to do.*/
                 if (!high_priority) {
                         r = 0;
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
                 }
 
                 p = startswith(qpos, "low-priority/");
                 if (!p) {
                         r = -EBADMSG;
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
                 }
                 r = safe_atou64(p, &old_position);
                 if (r < 0)
+		{
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         goto finish;
+		}
 
                 /* Was the old low-priority item already dispatched? Don't requeue the item then, except this is explicitly requested. */
                 if (old_position < rr->queue_start_low && !please_requeue) {
@@ -763,10 +801,12 @@ static int ca_remote_enqueue_request(CaRemote *rr, const CaChunkID *id, bool hig
 
                 if (unlinkat(rr->cache_fd, f, 0) < 0) {
                         r = -errno;
+			fprintf(stderr, "%s@%i r: %i, f: %s\n", __func__, __LINE__, r, f);
                         goto finish;
                 }
                 if (unlinkat(rr->cache_fd, qpos, 0) < 0) {
                         r = -errno;
+			fprintf(stderr, "%s@%i r: %i, qpos: %s\n", __func__, __LINE__, r, qpos);
                         goto finish;
                 }
 
@@ -775,6 +815,7 @@ static int ca_remote_enqueue_request(CaRemote *rr, const CaChunkID *id, bool hig
 
         if (asprintf(&qpos, "%s%" PRIu64, queue_name, position) < 0) {
                 r = -ENOMEM;
+		fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                 goto finish;
         }
 
@@ -785,11 +826,13 @@ static int ca_remote_enqueue_request(CaRemote *rr, const CaChunkID *id, bool hig
 
         if (symlinkat(qpos, rr->cache_fd, f) < 0) {
                 r = -errno;
+		fprintf(stderr, "%s@%i r: %i, f: %s\n", __func__, __LINE__, r, f);
                 goto finish;
         }
 
         if (symlinkat(ids, rr->cache_fd, qpos) < 0) {
                 r = -errno;
+		fprintf(stderr, "%s@%i r: %i, qpos: %s\n", __func__, __LINE__, r, qpos);
                 goto finish;
         }
 
@@ -807,6 +850,7 @@ finish:
         return r;
 }
 
+/* static */
 static int ca_remote_dequeue_request(CaRemote *rr, int only_high_priority, CaChunkID *ret, bool *ret_high_priority) {
         const char *queue_name;
         uint64_t position;
@@ -839,6 +883,11 @@ static int ca_remote_dequeue_request(CaRemote *rr, int only_high_priority, CaChu
                         return -ENOMEM;
 
                 r = readlinkat_malloc(rr->cache_fd, qpos, &ids);
+                if (r != -ENOENT)
+		{
+			if (r != 0)
+				fprintf(stderr, "%s@%i r: %i, qpos: %s\n", __func__, __LINE__, r, qpos);
+		}
                 free(qpos);
                 if (r >= 0)
                         break;
@@ -873,6 +922,7 @@ static int ca_remote_dequeue_request(CaRemote *rr, int only_high_priority, CaChu
         return 0;
 }
 
+/* static */
 static int ca_remote_file_open(CaRemote *rr, CaRemoteFile *f, int flags) {
         int r;
 
@@ -910,6 +960,7 @@ static int ca_remote_file_open(CaRemote *rr, CaRemoteFile *f, int flags) {
         return 1;
 }
 
+/* static */
 static int ca_remote_start(CaRemote *rr) {
         int r;
 
@@ -957,6 +1008,7 @@ static int ca_remote_start(CaRemote *rr) {
                         return -errno;
                 }
 
+		fprintf(stderr, "%s@%u [%-4s] === rr->input_fd: %i, rr->output_fd: %i\n", __func__, __LINE__, rr->pid == 0 ? "HTTP" : "TOOL", rr->input_fd, rr->output_fd);
                 if (rr->pid == 0) {
                         char **args, **u;
                         size_t i = 0, skip;
@@ -1086,6 +1138,7 @@ static int ca_remote_start(CaRemote *rr) {
         return CA_REMOTE_POLL;
 }
 
+/* static */
 static int ca_remote_read(CaRemote *rr) {
         size_t left, rsize;
         ssize_t n;
@@ -1105,15 +1158,19 @@ static int ca_remote_read(CaRemote *rr) {
                 return -ENOMEM;
 
         n = read(rr->input_fd, p, left);
+	//if (rr->pid) fprintf(stderr, "%s@%u [%-4s] <<< rr->input_fd: %i, left: %lu, n: %li\n", __func__, __LINE__, rr->pid == 0 ? "HTTP" : "TOOL", rr->input_fd, left, n);
+	//if (n > 0 && rr->pid) REALLOC_BUFFER_HEXDUMP(stderr, &rr->input_buffer, REALLOC_BUFFER_HEXDUMP_SIZE);
         realloc_buffer_shorten(&rr->input_buffer, n < 0 ? left : left - n);
         if (n < 0)
                 return errno == EAGAIN ? CA_REMOTE_POLL : -errno;
         if (n == 0) /* EOF */
                 return -EPIPE;
+	//if (rr->pid) fprintf(stderr, "%s@%u [%-4s] <<< rr->input_buffer: %lu\n", __func__, __LINE__, rr->pid == 0 ? "HTTP" : "TOOL", realloc_buffer_size(&rr->input_buffer)); 
 
         return CA_REMOTE_STEP;
 }
 
+/* static */
 static int ca_remote_write(CaRemote *rr) {
         ssize_t n;
 
@@ -1123,10 +1180,13 @@ static int ca_remote_write(CaRemote *rr) {
                 return CA_REMOTE_POLL;
 
         n = write(rr->output_fd, realloc_buffer_data(&rr->output_buffer), realloc_buffer_size(&rr->output_buffer));
+	//if (rr->pid == 0) fprintf(stderr, "%s@%u [%-4s] >>> rr->output_fd: %i, size: %lu, n: %li\n", __func__, __LINE__, rr->pid == 0 ? "HTTP" : "TOOL", rr->output_fd, realloc_buffer_size(&rr->output_buffer), n);
         if (n < 0)
                 return errno == EAGAIN ? CA_REMOTE_POLL : -errno;
+	//if (rr->pid == 0) REALLOC_BUFFER_HEXDUMP(stderr, &rr->output_buffer, REALLOC_BUFFER_HEXDUMP_SIZE);
 
         realloc_buffer_advance(&rr->output_buffer, n);
+	//if (rr->pid == 0) fprintf(stderr, "%s@%u [%-4s] >>> rr->output_buffer: %lu\n", __func__, __LINE__, rr->pid == 0 ? "HTTP" : "TOOL", realloc_buffer_size(&rr->output_buffer)); 
 
         if (rr->sent_goodbye && realloc_buffer_size(&rr->output_buffer) == 0)
                 return CA_REMOTE_FINISHED;
@@ -1134,6 +1194,7 @@ static int ca_remote_write(CaRemote *rr) {
         return CA_REMOTE_STEP;
 }
 
+/* static */
 static bool operations_and_services_compatible(uint64_t operations, uint64_t services) {
 
         if ((operations & CA_PROTOCOL_PULL_CHUNKS) && !(services & CA_PROTOCOL_READABLE_STORE))
@@ -1153,6 +1214,7 @@ static bool operations_and_services_compatible(uint64_t operations, uint64_t ser
         return true;
 }
 
+/* static */
 static int ca_remote_process_hello(CaRemote *rr, const CaProtocolHello *hello) {
         uint64_t remote_flags;
 
@@ -1183,6 +1245,7 @@ static int ca_remote_process_hello(CaRemote *rr, const CaProtocolHello *hello) {
         return CA_REMOTE_STEP;
 }
 
+/* static */
 static int ca_remote_file_process(CaRemoteFile *f, const CaProtocolFile *p) {
         size_t sz;
         int r;
@@ -1207,6 +1270,7 @@ static int ca_remote_file_process(CaRemoteFile *f, const CaProtocolFile *p) {
         return 0;
 }
 
+/* static */
 static int ca_remote_file_process_eof(CaRemoteFile *f, const CaProtocolFileEOF *eof) {
         assert(f);
         assert(eof);
@@ -1218,6 +1282,7 @@ static int ca_remote_file_process_eof(CaRemoteFile *f, const CaProtocolFileEOF *
         return 0;
 }
 
+/* static */
 static int ca_remote_process_index(CaRemote *rr, const CaProtocolFile *p) {
         int r;
 
@@ -1231,6 +1296,7 @@ static int ca_remote_process_index(CaRemote *rr, const CaProtocolFile *p) {
         return CA_REMOTE_READ_INDEX;
 }
 
+/* static */
 static int ca_remote_process_index_eof(CaRemote *rr, const CaProtocolFileEOF *eof) {
         int r;
 
@@ -1244,6 +1310,7 @@ static int ca_remote_process_index_eof(CaRemote *rr, const CaProtocolFileEOF *eo
         return CA_REMOTE_READ_INDEX_EOF;
 }
 
+/* static */
 static int ca_remote_process_archive(CaRemote *rr, const CaProtocolFile *p) {
         int r;
 
@@ -1257,6 +1324,7 @@ static int ca_remote_process_archive(CaRemote *rr, const CaProtocolFile *p) {
         return CA_REMOTE_READ_ARCHIVE;
 }
 
+/* static */
 static int ca_remote_process_archive_eof(CaRemote *rr, const CaProtocolFileEOF *eof) {
         int r;
 
@@ -1270,6 +1338,7 @@ static int ca_remote_process_archive_eof(CaRemote *rr, const CaProtocolFileEOF *
         return CA_REMOTE_READ_ARCHIVE_EOF;
 }
 
+/* static */
 static int ca_remote_process_request(CaRemote *rr, const CaProtocolRequest *req) {
         const uint8_t *p;
         size_t ms;
@@ -1289,6 +1358,7 @@ static int ca_remote_process_request(CaRemote *rr, const CaProtocolRequest *req)
         return CA_REMOTE_REQUEST;
 }
 
+/* static */
 static int ca_remote_process_chunk(CaRemote *rr, const CaProtocolChunk *chunk) {
         size_t ms;
         int r;
@@ -1320,6 +1390,7 @@ static int ca_remote_process_chunk(CaRemote *rr, const CaProtocolChunk *chunk) {
         return CA_REMOTE_CHUNK;
 }
 
+/* static */
 static int ca_remote_process_missing(CaRemote *rr, const CaProtocolMissing *missing) {
         int r;
 
@@ -1338,6 +1409,7 @@ static int ca_remote_process_missing(CaRemote *rr, const CaProtocolMissing *miss
         return CA_REMOTE_CHUNK;
 }
 
+/* static */
 static int ca_remote_file_install(CaRemoteFile *f) {
         assert(f);
 
@@ -1356,6 +1428,7 @@ static int ca_remote_file_install(CaRemoteFile *f) {
         return 1;
 }
 
+/* static */
 static int ca_remote_process_goodbye(CaRemote *rr, const CaProtocolGoodbye *goodbye) {
         int r;
 
@@ -1375,6 +1448,7 @@ static int ca_remote_process_goodbye(CaRemote *rr, const CaProtocolGoodbye *good
         return CA_REMOTE_FINISHED;
 }
 
+/* static */
 static int ca_remote_process_abort(CaRemote *rr, const CaProtocolAbort *a) {
         assert(rr);
         assert(a);
@@ -1385,6 +1459,7 @@ static int ca_remote_process_abort(CaRemote *rr, const CaProtocolAbort *a) {
         return -ECONNABORTED;
 }
 
+/* static */
 static const CaProtocolHello* validate_hello(CaRemote *rr, const CaProtocolHeader *h) {
         const CaProtocolHello *hello;
 
@@ -1406,6 +1481,7 @@ static const CaProtocolHello* validate_hello(CaRemote *rr, const CaProtocolHeade
         return (const CaProtocolHello*) h;
 }
 
+/* static */
 static const CaProtocolFile* validate_file(CaRemote *rr, uint64_t type, const CaProtocolHeader *h) {
         assert(rr);
         assert(h);
@@ -1418,6 +1494,7 @@ static const CaProtocolFile* validate_file(CaRemote *rr, uint64_t type, const Ca
         return (const CaProtocolFile*) h;
 }
 
+/* static */
 static const CaProtocolFileEOF* validate_file_eof(CaRemote *rr, uint64_t type, const CaProtocolHeader *h) {
         assert(rr);
         assert(h);
@@ -1430,6 +1507,7 @@ static const CaProtocolFileEOF* validate_file_eof(CaRemote *rr, uint64_t type, c
         return (const CaProtocolFileEOF*) h;
 }
 
+/* static */
 static const CaProtocolRequest* validate_request(CaRemote *rr, const CaProtocolHeader *h) {
         const CaProtocolRequest *req;
 
@@ -1450,6 +1528,7 @@ static const CaProtocolRequest* validate_request(CaRemote *rr, const CaProtocolH
         return req;
 }
 
+/* static */
 static const CaProtocolChunk* validate_chunk(CaRemote *rr, const CaProtocolHeader *h) {
         const CaProtocolChunk *c;
         uint64_t flags;
@@ -1472,6 +1551,7 @@ static const CaProtocolChunk* validate_chunk(CaRemote *rr, const CaProtocolHeade
         return c;
 }
 
+/* static */
 static const CaProtocolMissing* validate_missing(CaRemote *rr, const CaProtocolHeader *h) {
         assert(rr);
         assert(h);
@@ -1484,6 +1564,7 @@ static const CaProtocolMissing* validate_missing(CaRemote *rr, const CaProtocolH
         return (const CaProtocolMissing*) h;
 }
 
+/* static */
 static const CaProtocolGoodbye* validate_goodbye(CaRemote *rr, const CaProtocolHeader *h) {
         assert(rr);
         assert(h);
@@ -1496,6 +1577,7 @@ static const CaProtocolGoodbye* validate_goodbye(CaRemote *rr, const CaProtocolH
         return (const CaProtocolGoodbye*) h;
 }
 
+/* static */
 static const CaProtocolAbort* validate_abort(CaRemote *rr, const CaProtocolHeader *h) {
         const CaProtocolAbort *a;
         const char *p;
@@ -1525,6 +1607,7 @@ static const CaProtocolAbort* validate_abort(CaRemote *rr, const CaProtocolHeade
         return a;
 }
 
+/* static */
 static int ca_remote_process_message(CaRemote *rr) {
         const CaProtocolHeader *h;
         uint64_t size;
@@ -1542,9 +1625,15 @@ static int ca_remote_process_message(CaRemote *rr) {
 
         size = read_le64(&h->size);
         if (size < CA_PROTOCOL_SIZE_MIN)
+	{
+		fprintf(stderr, "%s@%i size: %lu < %lu, return -EBADMSG\n", __func__, __LINE__, h->size, CA_PROTOCOL_SIZE_MIN);
                 return -EBADMSG;
+	}
         if (size > CA_PROTOCOL_SIZE_MAX)
+	{
+		fprintf(stderr, "%s@%i size: %lu > %u, return -EBADMSG\n", __func__, __LINE__, h->size, CA_PROTOCOL_SIZE_MAX);
                 return -EBADMSG;
+	}
 
         if (realloc_buffer_size(&rr->input_buffer) < size) {
                 rr->frame_size = (size_t) size; /* Tell the read logic, that we can't proceed without this much in the buffer */
@@ -1563,11 +1652,17 @@ static int ca_remote_process_message(CaRemote *rr) {
                 const CaProtocolHello *hello;
 
                 if (rr->state != CA_REMOTE_HELLO)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 hello = validate_hello(rr, h);
                 if (!hello)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 step = ca_remote_process_hello(rr, hello);
                 break;
@@ -1577,14 +1672,23 @@ static int ca_remote_process_message(CaRemote *rr) {
                 const CaProtocolFile *f;
 
                 if (rr->state != CA_REMOTE_RUNNING)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
                 if (((rr->local_feature_flags & CA_PROTOCOL_PULL_INDEX) == 0) &&
                      ((rr->remote_feature_flags & CA_PROTOCOL_PUSH_INDEX) == 0))
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 f = validate_file(rr, CA_PROTOCOL_INDEX, h);
                 if (!f)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 step = ca_remote_process_index(rr, f);
                 break;
@@ -1594,14 +1698,23 @@ static int ca_remote_process_message(CaRemote *rr) {
                 const CaProtocolFileEOF *eof;
 
                 if (rr->state != CA_REMOTE_RUNNING)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
                 if (((rr->local_feature_flags & CA_PROTOCOL_PULL_INDEX) == 0) &&
                     ((rr->remote_feature_flags & CA_PROTOCOL_PUSH_INDEX) == 0))
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 eof = validate_file_eof(rr, CA_PROTOCOL_INDEX_EOF, h);
                 if (!eof)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 step = ca_remote_process_index_eof(rr, eof);
                 break;
@@ -1611,14 +1724,23 @@ static int ca_remote_process_message(CaRemote *rr) {
                 const CaProtocolFile *f;
 
                 if (rr->state != CA_REMOTE_RUNNING)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
                 if (((rr->local_feature_flags & CA_PROTOCOL_PULL_ARCHIVE) == 0) &&
                      ((rr->remote_feature_flags & CA_PROTOCOL_PUSH_ARCHIVE) == 0))
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 f = validate_file(rr, CA_PROTOCOL_ARCHIVE, h);
                 if (!f)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 step = ca_remote_process_archive(rr, f);
                 break;
@@ -1628,14 +1750,23 @@ static int ca_remote_process_message(CaRemote *rr) {
                 const CaProtocolFileEOF *eof;
 
                 if (rr->state != CA_REMOTE_RUNNING)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
                 if (((rr->local_feature_flags & CA_PROTOCOL_PULL_ARCHIVE) == 0) &&
                     ((rr->remote_feature_flags & CA_PROTOCOL_PUSH_ARCHIVE) == 0))
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 eof = validate_file_eof(rr, CA_PROTOCOL_ARCHIVE_EOF, h);
                 if (!eof)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 step = ca_remote_process_archive_eof(rr, eof);
                 break;
@@ -1645,14 +1776,23 @@ static int ca_remote_process_message(CaRemote *rr) {
                 const CaProtocolRequest *req;
 
                 if (rr->state != CA_REMOTE_RUNNING)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
                 if (((rr->local_feature_flags & CA_PROTOCOL_PUSH_CHUNKS) == 0) &&
                     ((rr->remote_feature_flags & CA_PROTOCOL_PULL_CHUNKS) == 0))
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 req = validate_request(rr, h);
                 if (!req)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 step = ca_remote_process_request(rr, req);
                 break;
@@ -1662,14 +1802,23 @@ static int ca_remote_process_message(CaRemote *rr) {
                 const CaProtocolChunk *chunk;
 
                 if (rr->state != CA_REMOTE_RUNNING)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
                 if (((rr->local_feature_flags & CA_PROTOCOL_PULL_CHUNKS) == 0) &&
                     ((rr->remote_feature_flags & CA_PROTOCOL_PUSH_CHUNKS) == 0))
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 chunk = validate_chunk(rr, h);
                 if (!chunk)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 step = ca_remote_process_chunk(rr, chunk);
                 break;
@@ -1679,14 +1828,23 @@ static int ca_remote_process_message(CaRemote *rr) {
                 const CaProtocolMissing *missing;
 
                 if (rr->state != CA_REMOTE_RUNNING)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
                 if (((rr->local_feature_flags & CA_PROTOCOL_PULL_CHUNKS) == 0) &&
                     ((rr->remote_feature_flags & CA_PROTOCOL_PUSH_CHUNKS) == 0))
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 missing = validate_missing(rr, h);
                 if (!missing)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 step = ca_remote_process_missing(rr, missing);
                 break;
@@ -1696,11 +1854,17 @@ static int ca_remote_process_message(CaRemote *rr) {
                 const CaProtocolGoodbye *goodbye;
 
                 if (rr->state != CA_REMOTE_RUNNING)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 goodbye = validate_goodbye(rr, h);
                 if (!goodbye)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 step = ca_remote_process_goodbye(rr, goodbye);
                 break;
@@ -1711,13 +1875,17 @@ static int ca_remote_process_message(CaRemote *rr) {
 
                 abort = validate_abort(rr, h);
                 if (!abort)
+		{
+			fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                         return -EBADMSG;
+		}
 
                 step = ca_remote_process_abort(rr, abort);
                 break;
         }
 
         default:
+		fprintf(stderr, "%s@%i rr->state: %i, return -EBADMSG\n", __func__, __LINE__, rr->state);
                 return -EBADMSG;
         }
 
@@ -1726,13 +1894,17 @@ static int ca_remote_process_message(CaRemote *rr) {
 
         r = realloc_buffer_advance(&rr->input_buffer, size);
         if (r < 0)
+	{
+		fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                 return r;
+	}
 
         rr->frame_size = 0;
 
         return step;
 }
 
+/* static */
 static int ca_remote_send_hello(CaRemote *rr) {
         CaProtocolHello *hello;
 
@@ -1753,6 +1925,7 @@ static int ca_remote_send_hello(CaRemote *rr) {
         return CA_REMOTE_STEP;
 }
 
+/* static */
 static int ca_remote_send_file(
                 CaRemote *rr,
                 CaRemoteFile *f,
@@ -1816,6 +1989,7 @@ static int ca_remote_send_file(
         return CA_REMOTE_STEP;
 }
 
+/* static */
 static int ca_remote_send_index(CaRemote *rr) {
         assert(rr);
 
@@ -1831,6 +2005,7 @@ static int ca_remote_send_index(CaRemote *rr) {
                         CA_REMOTE_WRITE_INDEX);
 }
 
+/* static */
 static int ca_remote_send_archive(CaRemote *rr) {
         assert(rr);
 
@@ -1846,6 +2021,7 @@ static int ca_remote_send_archive(CaRemote *rr) {
                         CA_REMOTE_WRITE_ARCHIVE);
 }
 
+/* static */
 static int ca_remote_send_request(CaRemote *rr) {
         size_t header_offset = (size_t) -1;
         int only_high_priority = -1, r;
@@ -1911,6 +2087,7 @@ static int ca_remote_send_request(CaRemote *rr) {
         return header_offset != (size_t) -1 ? CA_REMOTE_STEP : CA_REMOTE_POLL;
 }
 
+/* casync, tool/pull+push, helper */
 int ca_remote_step(CaRemote *rr) {
         int r;
 
@@ -1957,6 +2134,7 @@ int ca_remote_step(CaRemote *rr) {
         return CA_REMOTE_POLL;
 }
 
+/* tool/pull+push, helper */
 int ca_remote_poll(CaRemote *rr, uint64_t timeout_nsec, const sigset_t *ss) {
         struct pollfd pollfd[2];
         size_t n = 0;
@@ -1998,6 +2176,7 @@ int ca_remote_poll(CaRemote *rr, uint64_t timeout_nsec, const sigset_t *ss) {
         return 1;
 }
 
+/* static */
 static int ca_remote_validate_chunk(
                 CaRemote *rr,
                 const CaChunkID *id,
@@ -2026,7 +2205,10 @@ static int ca_remote_validate_chunk(
 
                 r = ca_decompress(p, l, &rr->validate_buffer);
                 if (r < 0)
+		{
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         return r;
+		}
 
                 p = realloc_buffer_data(&rr->validate_buffer);
                 l = realloc_buffer_size(&rr->validate_buffer);
@@ -2041,19 +2223,28 @@ static int ca_remote_validate_chunk(
                 /* Allocate the digest object, and start with sha512-256 if we don't know which algorithm to use. */
                 r = ca_digest_new(rr->digest_type >= 0 ? rr->digest_type : CA_DIGEST_DEFAULT, &rr->validate_digest);
                 if (r < 0)
+		{
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         return r;
+		}
         }
 
         r = ca_chunk_id_make(rr->validate_digest, p, l, &actual);
         if (r < 0)
+	{
+		fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                 return r;
+	}
 
         if (!ca_chunk_id_equal(id, &actual)) {
                 CaDigestType old_type, i;
 
                 /* If an explicit digest algorithm was set, then a mismatch is fatal */
                 if (rr->digest_type >= 0)
+		{
+			fprintf(stderr, "%s@%i rr->digest_type: %i, return -EBADMSG\n", __func__, __LINE__, rr->digest_type);
                         return -EBADMSG;
+		}
 
                 old_type = ca_digest_get_type(rr->validate_digest);
                 if (old_type < 0)
@@ -2067,22 +2258,33 @@ static int ca_remote_validate_chunk(
 
                         r = ca_digest_set_type(rr->validate_digest, i);
                         if (r < 0)
+			{
+				fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                                 return r;
+			}
 
                         r = ca_chunk_id_make(rr->validate_digest, p, l, &actual);
                         if (r < 0)
+			{
+				fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                                 return r;
+			}
 
                         if (ca_chunk_id_equal(id, &actual))
-                                return 0;
+			{
+				fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
+                                return r;
+			}
                 }
 
+		fprintf(stderr, "%s@%i return -EBADMSG\n", __func__, __LINE__);
                 return -EBADMSG;
         }
 
         return 0;
 }
 
+/* casync, tool/push */
 int ca_remote_request(
                 CaRemote *rr,
                 const CaChunkID *chunk_id,
@@ -2111,7 +2313,10 @@ int ca_remote_request(
 
         r = ca_remote_init_cache(rr);
         if (r < 0)
+	{
+		fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                 return r;
+	}
 
         realloc_buffer_empty(&rr->chunk_buffer);
 
@@ -2120,22 +2325,51 @@ int ca_remote_request(
                 /* We don't have it right now. Enqueue it */
                 r = ca_remote_enqueue_request(rr, chunk_id, high_priority, true);
                 if (r < 0)
+		{
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         return r;
+		}
                 if (r > 0)
                         return -EAGAIN; /* Not a failure, but we don't have it right now, but have enqueued it. */
 
+		if (r != 0)
+			fprintf(stderr, "%s@%i r: %i, return EALREADY\n", __func__, __LINE__, r);
                 return -EALREADY; /* Not a failure, but we don't have it right now, but it was already enqueued it. */
         }
         if (r == -EADDRNOTAVAIL) /* We really don't have this */
                 return -ENOENT;
         if (r < 0)
+	{
+		char buf[CA_CHUNK_ID_FORMAT_MAX];
+		char *s = NULL;
+
+		s = ca_chunk_id_format(chunk_id, buf);
+		if (!s)
+			fprintf(stderr, "%s@%i r: %i, realloc_buffer_size: %lu\n", __func__, __LINE__, r, realloc_buffer_size(&rr->chunk_buffer));
+		else
+			fprintf(stderr, "%s@%i r: %i, realloc_buffer_size: %lu, chunk-id: %s\n", __func__, __LINE__, r, realloc_buffer_size(&rr->chunk_buffer), s);
+
+		REALLOC_BUFFER_HEXDUMP(stderr, &rr->chunk_buffer, REALLOC_BUFFER_HEXDUMP_SIZE);
                 return r;
+	}
 
         /* We already have the chunk. Now, validate it before returning it. */
 
         r = ca_remote_validate_chunk(rr, chunk_id, compression, realloc_buffer_data(&rr->chunk_buffer), realloc_buffer_size(&rr->chunk_buffer));
         if (r < 0)
+	{
+		char buf[CA_CHUNK_ID_FORMAT_MAX];
+		char *s = NULL;
+
+		s = ca_chunk_id_format(chunk_id, buf);
+		if (!s)
+			fprintf(stderr, "%s@%i r: %i,  realloc_buffer_size: %lu\n", __func__, __LINE__, r, realloc_buffer_size(&rr->chunk_buffer));
+		else
+			fprintf(stderr, "%s@%i r: %i,  realloc_buffer_size: %lu, chunk-id: %s\n", __func__, __LINE__, r, realloc_buffer_size(&rr->chunk_buffer), s);
+
+		REALLOC_BUFFER_HEXDUMP(stderr, &rr->chunk_buffer, REALLOC_BUFFER_HEXDUMP_SIZE);
                 return r;
+	}
 
         *ret = realloc_buffer_data(&rr->chunk_buffer);
         *ret_size = realloc_buffer_size(&rr->chunk_buffer);
@@ -2149,6 +2383,7 @@ int ca_remote_request(
         return 1;
 }
 
+/* casync, tool/push */
 int ca_remote_request_async(CaRemote *rr, const CaChunkID *chunk_id, bool high_priority) {
         if (!rr)
                 return -EINVAL;
@@ -2164,6 +2399,7 @@ int ca_remote_request_async(CaRemote *rr, const CaChunkID *chunk_id, bool high_p
         return ca_remote_enqueue_request(rr, chunk_id, high_priority, true);
 }
 
+/* casync/push, tool/pull, helper */
 int ca_remote_next_request(CaRemote *rr, CaChunkID *ret) {
         if (!rr)
                 return -EINVAL;
@@ -2179,6 +2415,7 @@ int ca_remote_next_request(CaRemote *rr, CaChunkID *ret) {
         return ca_remote_dequeue_request(rr, -1, ret, NULL);
 }
 
+/* casync/push, tool/pull, helper */
 int ca_remote_can_put_chunk(CaRemote *rr) {
         if (!rr)
                 return -EINVAL;
@@ -2200,6 +2437,7 @@ int ca_remote_can_put_chunk(CaRemote *rr) {
         return 1;
 }
 
+/* casync/~wrapper, tool/push, helper */
 int ca_remote_put_chunk(
                 CaRemote *rr,
                 const CaChunkID *chunk_id,
@@ -2240,6 +2478,7 @@ int ca_remote_put_chunk(
         if (msz > CA_PROTOCOL_SIZE_MAX)
                 return -EFBIG;
 
+	if (rr->pid == 0) fprintf(stderr, "%s@%u [%-4s] === rr->output_buffer: %lu, size: %lu, msz: %lu\n", __func__, __LINE__, rr->pid == 0 ? "HTTP" : "TOOL", realloc_buffer_size(&rr->output_buffer), size, msz);
         chunk = realloc_buffer_extend(&rr->output_buffer, msz);
         if (!chunk)
                 return -ENOMEM;
@@ -2250,10 +2489,14 @@ int ca_remote_put_chunk(
 
         memcpy(chunk->chunk, chunk_id, CA_CHUNK_ID_SIZE);
         memcpy(chunk->data, data, size);
+	if (rr->pid == 0) hexdump(stderr, chunk, sizeof(CaProtocolChunk)+sizeof(uint64_t)+REALLOC_BUFFER_HEXDUMP_SIZE);
+	if (rr->pid == 0) fprintf(stderr, "%s@%u [%-4s] === rr->output_buffer: %lu\n", __func__, __LINE__, rr->pid == 0 ? "HTTP" : "TOOL", realloc_buffer_size(&rr->output_buffer)); 
+	if (rr->pid == 0) fflush(stderr);
 
         return 0;
 }
 
+/* casync, helper */
 int ca_remote_put_missing(CaRemote *rr, const CaChunkID *chunk_id) {
         CaProtocolMissing *missing;
         int r;
@@ -2285,6 +2528,7 @@ int ca_remote_put_missing(CaRemote *rr, const CaChunkID *chunk_id) {
         return 0;
 }
 
+/* static */
 static int ca_remote_file_can_put(CaRemote *rr, CaRemoteFile *f) {
         assert(rr);
         assert(f);
@@ -2303,6 +2547,7 @@ static int ca_remote_file_can_put(CaRemote *rr, CaRemoteFile *f) {
         return 1;
 }
 
+/* casync/~wrapper, helper */
 int ca_remote_can_put_index(CaRemote *rr) {
         if (!rr)
                 return -EINVAL;
@@ -2316,6 +2561,7 @@ int ca_remote_can_put_index(CaRemote *rr) {
         return ca_remote_file_can_put(rr, &rr->index_file);
 }
 
+/* static */
 static int ca_remote_file_put(CaRemote *rr, CaRemoteFile *f, uint64_t type, const void *data, size_t size) {
         CaProtocolFile *p;
         size_t msz;
@@ -2341,6 +2587,7 @@ static int ca_remote_file_put(CaRemote *rr, CaRemoteFile *f, uint64_t type, cons
         return 0;
 }
 
+/* casync/~wrapper, helper */
 int ca_remote_put_index(CaRemote *rr, const void *data, size_t size) {
         int r;
 
@@ -2364,6 +2611,7 @@ int ca_remote_put_index(CaRemote *rr, const void *data, size_t size) {
         return ca_remote_file_put(rr, &rr->index_file, CA_PROTOCOL_INDEX, data, size);
 }
 
+/* static */
 static int ca_remote_file_put_eof(CaRemote *rr, CaRemoteFile *f, uint64_t type) {
         CaProtocolFileEOF *eof;
 
@@ -2382,6 +2630,7 @@ static int ca_remote_file_put_eof(CaRemote *rr, CaRemoteFile *f, uint64_t type) 
         return 0;
 }
 
+/* casync/~wrapper, helper */
 int ca_remote_put_index_eof(CaRemote *rr) {
         int r;
 
@@ -2401,6 +2650,7 @@ int ca_remote_put_index_eof(CaRemote *rr) {
         return ca_remote_file_put_eof(rr, &rr->index_file, CA_PROTOCOL_INDEX_EOF);
 }
 
+/* static */
 static int ca_remote_file_read(CaRemote *rr, CaRemoteFile *f, const void **ret, size_t *ret_size) {
         assert(rr);
         assert(f);
@@ -2427,6 +2677,7 @@ static int ca_remote_file_read(CaRemote *rr, CaRemoteFile *f, const void **ret, 
         return 1;
 }
 
+/* casync, tool */
 int ca_remote_read_index(CaRemote *rr, const void **ret, size_t *ret_size) {
         if (!rr)
                 return -EINVAL;
@@ -2442,6 +2693,7 @@ int ca_remote_read_index(CaRemote *rr, const void **ret, size_t *ret_size) {
         return ca_remote_file_read(rr, &rr->index_file, ret, ret_size);
 }
 
+/* casync, helper */
 int ca_remote_can_put_archive(CaRemote *rr) {
         if (!rr)
                 return -EINVAL;
@@ -2455,6 +2707,7 @@ int ca_remote_can_put_archive(CaRemote *rr) {
         return ca_remote_file_can_put(rr, &rr->archive_file);
 }
 
+/* casync/~wrapper, helper */
 int ca_remote_put_archive(CaRemote *rr, const void *data, size_t size) {
         int r;
 
@@ -2478,6 +2731,7 @@ int ca_remote_put_archive(CaRemote *rr, const void *data, size_t size) {
         return ca_remote_file_put(rr, &rr->archive_file, CA_PROTOCOL_ARCHIVE, data, size);
 }
 
+/* casync/wrapper, helper */
 int ca_remote_put_archive_eof(CaRemote *rr) {
         int r;
 
@@ -2497,6 +2751,7 @@ int ca_remote_put_archive_eof(CaRemote *rr) {
         return ca_remote_file_put_eof(rr, &rr->archive_file, CA_PROTOCOL_ARCHIVE_EOF);
 }
 
+/* casync */
 int ca_remote_read_archive(CaRemote *rr, const void **ret, size_t *ret_size) {
         if (!rr)
                 return -EINVAL;
@@ -2512,6 +2767,7 @@ int ca_remote_read_archive(CaRemote *rr, const void **ret, size_t *ret_size) {
         return ca_remote_file_read(rr, &rr->archive_file, ret, ret_size);
 }
 
+/* tool */
 int ca_remote_goodbye(CaRemote *rr) {
         CaProtocolGoodbye *goodbye;
         int r;
@@ -2521,7 +2777,10 @@ int ca_remote_goodbye(CaRemote *rr) {
         if (rr->state == CA_REMOTE_EOF)
                 return -EPIPE;
         if (rr->sent_goodbye)
+	{
+		fprintf(stderr, "%s@%i rr->sent_goodbye: %i\n", __func__, __LINE__, rr->sent_goodbye);
                 return -EALREADY;
+	}
 
         r = ca_remote_file_install(&rr->index_file);
         if (r < 0)
@@ -2543,6 +2802,7 @@ int ca_remote_goodbye(CaRemote *rr) {
         return 0;
 }
 
+/* helper */
 int ca_remote_abort(CaRemote *rr, int error, const char *message) {
         CaProtocolAbort *a;
         size_t l;
@@ -2556,7 +2816,10 @@ int ca_remote_abort(CaRemote *rr, int error, const char *message) {
         if (rr->state == CA_REMOTE_EOF)
                 return -EPIPE;
         if (rr->sent_goodbye)
+	{
+		fprintf(stderr, "%s@%i rr->sent_goodbye: %i\n", __func__, __LINE__, rr->sent_goodbye);
                 return -EALREADY;
+	}
 
         l = strlen(message);
 
@@ -2574,6 +2837,7 @@ int ca_remote_abort(CaRemote *rr, int error, const char *message) {
         return 0;
 }
 
+/* helper */
 int ca_remote_has_pending_requests(CaRemote *rr) {
         if (!rr)
                 return -EINVAL;
@@ -2590,6 +2854,7 @@ int ca_remote_has_pending_requests(CaRemote *rr) {
         return 0;
 }
 
+/* tool, casync */
 int ca_remote_next_chunk(
                 CaRemote *rr,
                 CaChunkCompression desired_compression,
@@ -2626,7 +2891,10 @@ int ca_remote_next_chunk(
 
                 r = ca_remote_validate_chunk(rr, &rr->last_chunk, compression, realloc_buffer_data(&rr->chunk_buffer), realloc_buffer_size(&rr->chunk_buffer));
                 if (r < 0)
+		{
+			fprintf(stderr, "%s@%i r: %i\n", __func__, __LINE__, r);
                         return r;
+		}
 
                 *ret_data = realloc_buffer_data(&rr->chunk_buffer);
                 *ret_size = realloc_buffer_size(&rr->chunk_buffer);
@@ -2645,6 +2913,7 @@ int ca_remote_next_chunk(
         return r;
 }
 
+/* helper */
 int ca_remote_has_unwritten(CaRemote *rr) {
         if (!rr)
                 return -EINVAL;
@@ -2654,6 +2923,7 @@ int ca_remote_has_unwritten(CaRemote *rr) {
         return realloc_buffer_size(&rr->output_buffer) > 0;
 }
 
+/* tool */
 int ca_remote_has_chunks(CaRemote *rr) {
         DIR *d;
         int r;
@@ -2700,6 +2970,7 @@ int ca_remote_has_chunks(CaRemote *rr) {
         return 0;
 }
 
+/* tool */
 int ca_remote_forget_chunk(CaRemote *rr, const CaChunkID *id) {
         char ids[CA_CHUNK_ID_FORMAT_MAX], *qpos;
         const char *f;
@@ -2726,7 +2997,10 @@ int ca_remote_forget_chunk(CaRemote *rr, const CaChunkID *id) {
         f = strjoina("chunks/", ids);
         r = readlinkat_malloc(rr->cache_fd, f, &qpos);
         if (r < 0 && r != -ENOENT)
+	{
+		fprintf(stderr, "%s@%i r: %i, f: %s\n", __func__, __LINE__, r, f);
                 return r;
+	}
 
         if (r >= 0) {
                 const char *p;
@@ -2746,10 +3020,12 @@ int ca_remote_forget_chunk(CaRemote *rr, const CaChunkID *id) {
 
                 if (unlinkat(rr->cache_fd, f, 0) < 0) {
                         r = -errno;
+			fprintf(stderr, "%s@%i r: %i, f: %s\n", __func__, __LINE__, r, f);
                         goto finish;
                 }
                 if (unlinkat(rr->cache_fd, qpos, 0) < 0) {
                         r = -errno;
+			fprintf(stderr, "%s@%i r: %i, qpos: %s\n", __func__, __LINE__, r, qpos);
                         goto finish;
                 }
         }
@@ -2765,6 +3041,7 @@ finish:
         return r;
 }
 
+/* casync */
 int ca_remote_set_digest_type(CaRemote *rr, CaDigestType type) {
         int r;
 
@@ -2788,6 +3065,7 @@ int ca_remote_set_digest_type(CaRemote *rr, CaDigestType type) {
         return 0;
 }
 
+/* unused */
 int ca_remote_get_digest_type(CaRemote *rr, CaDigestType *ret) {
         if (!rr)
                 return -EINVAL;
@@ -2798,6 +3076,7 @@ int ca_remote_get_digest_type(CaRemote *rr, CaDigestType *ret) {
         return 0;
 }
 
+/* casync wrapper */
 int ca_remote_get_requests(CaRemote *rr, uint64_t *ret) {
         if (!rr)
                 return -EINVAL;
@@ -2808,6 +3087,7 @@ int ca_remote_get_requests(CaRemote *rr, uint64_t *ret) {
         return 0;
 }
 
+/* casync wrapper */
 int ca_remote_get_request_bytes(CaRemote *rr, uint64_t *ret) {
         if (!rr)
                 return -EINVAL;
@@ -2818,6 +3098,7 @@ int ca_remote_get_request_bytes(CaRemote *rr, uint64_t *ret) {
         return 0;
 }
 
+/* casync */
 int ca_remote_set_compression_type(CaRemote *rr, CaCompressionType ct) {
         if (!rr)
                 return -EINVAL;
