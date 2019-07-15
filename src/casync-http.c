@@ -316,8 +316,9 @@ static int acquire_file(CaRemote *rr,
 
         log_debug("Acquiring %s...", url);
 
-        if (robust_curl_easy_perform(curl) != CURLE_OK) {
-                log_error("Failed to acquire %s", url);
+        CURLcode c = robust_curl_easy_perform(curl);
+        if (c != CURLE_OK) {
+                log_error("Failed to acquire %s: %s", url, curl_easy_strerror(c));
                 return -EIO;
         }
 
@@ -465,6 +466,8 @@ static int run(int argc, char *argv[]) {
         }
 
         /* (void) curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L); */
+        (void) curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        (void) curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 
         if (archive_url) {
                 r = acquire_file(rr, curl, archive_url, write_archive);
@@ -567,8 +570,9 @@ static int run(int argc, char *argv[]) {
 
                 log_debug("Acquiring %s...", url_buffer);
 
-                if (robust_curl_easy_perform(curl) != CURLE_OK) {
-                        log_error("Failed to acquire %s", url_buffer);
+                CURLcode c = robust_curl_easy_perform(curl);
+                if (c != CURLE_OK) {
+                        log_error("Failed to acquire %s: %s", url_buffer, curl_easy_strerror(c));
                         r = -EIO;
                         goto finish;
                 }
